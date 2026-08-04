@@ -1,0 +1,14 @@
+{
+  "name": "tracking-spending-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0"
+  }
+}
+
+
