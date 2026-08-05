@@ -40,6 +40,10 @@ const en = {
     limit: "Limit",
     daysLeft: "days left",
     lastDayOfMonth: "Last day of month",
+    budgetAlertWarning: "⚠️ You have spent {{percent}}% of your monthly budget. Be careful!",
+    budget_alert_warning: "⚠️ You have spent {{percent}}% of your monthly budget. Be careful!",
+    budgetAlertDanger: "🚨 ALERT: You have exceeded your monthly budget by {{amount}}!",
+    budget_alert_danger: "🚨 ALERT: You have exceeded your monthly budget by {{amount}}!",
   },
   stats: {
     title: "Spending Statistics",

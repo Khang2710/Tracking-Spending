@@ -430,7 +430,16 @@ function HomeScreen({
     0
   );
   
-  const pctSpent = budget > 0 ? Math.min(Math.round((totalCurrentOutcome / budget) * 100), 100) : 0;
+  const rawBudgetPct = budget > 0 ? (totalCurrentOutcome / budget) * 100 : 0;
+  const pctSpent = Math.min(Math.round(rawBudgetPct), 100);
+  const overAmount = Math.max(0, totalCurrentOutcome - budget);
+
+  let progressColor = C.gold;
+  if (rawBudgetPct >= 100) {
+    progressColor = "#EF4444";
+  } else if (rawBudgetPct >= 80) {
+    progressColor = "#F97316";
+  }
 
   const getInitials = (name: string) => {
     if (!name) return "U";
@@ -538,7 +547,7 @@ function HomeScreen({
                   / ${budget.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <ProgressBar value={totalCurrentOutcome} max={budget} color={C.gold} />
+              <ProgressBar value={totalCurrentOutcome} max={budget} color={progressColor} />
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[12px] md:text-[14px]" style={{ color: C.tm }}>
                   {t("dashboard.dailyAvg")}: ${(totalCurrentOutcome / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} – {t("dashboard.limit")}: ${(budget / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
@@ -550,6 +559,43 @@ function HomeScreen({
                   {daysLeft === 0 ? t("dashboard.lastDayOfMonth") : `${daysLeft} ${t("dashboard.daysLeft")}`}
                 </span>
               </div>
+
+              {/* Alert Banner */}
+              {rawBudgetPct >= 100 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="alert-banner mt-3.5 p-3 md:p-3.5 rounded-xl border flex items-center gap-2.5 font-sans"
+                  style={{
+                    background: "#EF44441A",
+                    borderColor: "#EF444440",
+                    color: "#F87171",
+                  }}
+                >
+                  <span className="text-xs md:text-sm font-bold leading-relaxed">
+                    {t("dashboard.budgetAlertDanger", {
+                      amount: `$${overAmount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+                    })}
+                  </span>
+                </motion.div>
+              ) : rawBudgetPct >= 80 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="alert-banner mt-3.5 p-3 md:p-3.5 rounded-xl border flex items-center gap-2.5 font-sans text-xs md:text-sm font-medium"
+                  style={{
+                    background: "#F973161A",
+                    borderColor: "#F9731640",
+                    color: "#FB923C",
+                  }}
+                >
+                  <span className="leading-relaxed">
+                    {t("dashboard.budgetAlertWarning", {
+                      percent: Math.round(rawBudgetPct),
+                    })}
+                  </span>
+                </motion.div>
+              ) : null}
             </Card>
           </motion.div>
 

@@ -40,6 +40,10 @@ const vi = {
     limit: "Hạn mức",
     daysLeft: "ngày còn lại",
     lastDayOfMonth: "Ngày cuối tháng",
+    budgetAlertWarning: "⚠️ Bạn đã tiêu hết {{percent}}% ngân sách tháng này. Hãy cẩn thận!",
+    budget_alert_warning: "⚠️ Bạn đã tiêu hết {{percent}}% ngân sách tháng này. Hãy cẩn thận!",
+    budgetAlertDanger: "🚨 CẢNH BÁO: Bạn đã vượt quá ngân sách tháng này {{amount}}!",
+    budget_alert_danger: "🚨 CẢNH BÁO: Bạn đã vượt quá ngân sách tháng này {{amount}}!",
   },
   stats: {
     title: "Thống kê chi tiêu",
