@@ -113,7 +113,7 @@ const vi = {
     whoPaid: "Người trả tiền?",
     who_paid: "Người trả tiền?",
     tax: "Thuế (%)",
-    tip: "Tiền tip ($)",
+    tip: "Tiền tip ({{symbol}})",
     debtsDistribution: "Phân chia tiền nợ",
     debts_distribution: "Phân chia tiền nợ",
     itemsSubtotal: "Tổng tiền món",

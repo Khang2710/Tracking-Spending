@@ -113,7 +113,7 @@ const en = {
     whoPaid: "WHO PAID?",
     who_paid: "WHO PAID?",
     tax: "TAX (%)",
-    tip: "TIP ($)",
+    tip: "TIP ({{symbol}})",
     debtsDistribution: "DEBTS DISTRIBUTION",
     debts_distribution: "DEBTS DISTRIBUTION",
     itemsSubtotal: "Items Subtotal",

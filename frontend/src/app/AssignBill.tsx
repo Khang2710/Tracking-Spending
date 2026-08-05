@@ -39,11 +39,11 @@ export default function AssignBill({
   onAddTransaction,
 }: AssignBillProps) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(10);
-  const [tip, setTip] = useState<number>(15);
+  const [tip, setTip] = useState<number>(0);
 
   const [newFriendName, setNewFriendName] = useState("");
   const [rawReceipt, setRawReceipt] = useState("");
@@ -845,7 +845,9 @@ export default function AssignBill({
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-tm pl-0.5">{t("split.tip")}</label>
+                <label className="text-xs font-semibold text-tm pl-0.5">
+                  {t("split.tip", { symbol: currency === "VND" ? "₫" : "$" })}
+                </label>
                 <input
                   type="text"
                   inputMode="decimal"
