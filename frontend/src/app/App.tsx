@@ -532,16 +532,16 @@ function HomeScreen({
                   className="text-[22px] md:text-[28px] font-bold"
                   style={{ color: C.gold }}
                 >
-                  ${totalCurrentOutcome.toLocaleString()}
+                  ${totalCurrentOutcome.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
-                  / ${budget.toLocaleString()}
+                  / ${budget.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </span>
               </div>
               <ProgressBar value={totalCurrentOutcome} max={budget} color={C.gold} />
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[12px] md:text-[14px]" style={{ color: C.tm }}>
-                  {t("dashboard.dailyAvg")}: ${(totalCurrentOutcome / currentMonthDays).toFixed(2)} – {t("dashboard.limit")}: ${(budget / currentMonthDays).toFixed(2)}
+                  {t("dashboard.dailyAvg")}: ${(totalCurrentOutcome / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} – {t("dashboard.limit")}: ${(budget / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
                 <span
                   className="text-[12px] md:text-[14px] font-semibold"
@@ -610,13 +610,7 @@ function HomeScreen({
                         className="text-[20px] font-bold tracking-tight"
                         style={{ color: C.white }}
                       >
-                        ${w.balance.toLocaleString()}
-                      </span>
-                      <span
-                        className="text-[13px] font-medium"
-                        style={{ color: C.tm }}
-                      >
-                        .00
+                        ${w.balance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="flex items-center justify-between relative z-10">
@@ -706,7 +700,7 @@ function HomeScreen({
                         className="text-[14px] font-bold"
                         style={{ color: isPositive ? C.green : C.red }}
                       >
-                        {isPositive ? "+" : "-"}${Math.abs(t.amount).toFixed(2)}
+                        {isPositive ? "+" : "-"}${Math.abs(t.amount).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </span>
                       {/* Delete button – shows on hover */}
                       <motion.button
@@ -1015,17 +1009,17 @@ function StatisticsScreen({
                   className="text-[22px] md:text-[28px] font-bold"
                   style={{ color: C.gold }}
                 >
-                  ${totalMonthOutcome.toLocaleString()}
+                  ${totalMonthOutcome.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
-                  / ${budget.toLocaleString()}
+                  / ${budget.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </span>
               </div>
               <ProgressBar value={totalMonthOutcome} max={budget} color={C.gold} delay={0.1} />
               <p className="text-[12px] md:text-[14px] mt-3" style={{ color: C.tm }}>
-                {t("stats.dailyLimit")}: ${(budget / 30).toFixed(2)} ·{" "}
+                {t("stats.dailyLimit")}: ${(budget / 30).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ·{" "}
                 <span style={{ color: C.green, fontWeight: 600 }}>
-                  {t("stats.saved")} ${saved.toLocaleString()}
+                  {t("stats.saved")} ${saved.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
               </p>
             </Card>
@@ -2688,14 +2682,17 @@ export default function App() {
   const [budget, setBudget] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("wealthy_v2_budget");
-      if (saved && saved !== "820") {
+      if (saved) {
         const num = Number(saved);
-        if (!isNaN(num) && num >= 0) return num;
+        if (!isNaN(num) && num > 0) {
+          if (num === 1000 || num === 820) return 1000000;
+          return num;
+        }
       }
     } catch (e) {
       console.error("Error reading budget from localStorage", e);
     }
-    return 0;
+    return 1000000;
   });
 
   const [searchQuery, setSearchQuery] = useState("");
