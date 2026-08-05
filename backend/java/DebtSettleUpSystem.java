@@ -3,6 +3,7 @@ package settleup;
 import jakarta.persistence.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -159,7 +160,7 @@ interface TransactionRepository extends JpaRepository<Transaction, Long> {}
 // =============================================================================
 
 @Service
-public class DebtService {
+class DebtService {
 
     private final FriendBalanceRepository friendBalanceRepository;
     private final TransactionRepository transactionRepository;

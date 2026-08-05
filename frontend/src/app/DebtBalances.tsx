@@ -177,7 +177,7 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
                       isSettled ? "text-tm" : isLent ? "text-green-500" : "text-red-500"
                     }`}
                   >
-                    {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toFixed(2)}
+                    {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })}
                   </p>
                   <span
                     className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mt-1 ${
@@ -291,7 +291,7 @@ function DebtDetailModal({
                 isSettled ? "text-white" : isLent ? "text-green-500" : "text-red-500"
               }`}
             >
-              {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toFixed(2)}
+              {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })}
             </h2>
             <p className="text-xs text-tm mt-2">
               {isSettled
@@ -335,7 +335,7 @@ function DebtDetailModal({
                       <div className="flex justify-between items-baseline gap-2">
                         <span className="font-semibold text-white text-[13px] truncate">{record.description}</span>
                         <span className={`font-bold text-[13px] ${record.isLent ? "text-green-400" : "text-red-400"}`}>
-                          {record.isLent ? "+" : "-"}${record.amount.toFixed(2)}
+                          {record.isLent ? "+" : "-"}${record.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">

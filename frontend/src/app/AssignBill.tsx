@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Users, Receipt, Sparkles, Check, Trash2, ArrowUpRight } from "lucide-react";
+import { Plus, Users, Receipt, Sparkles, Check, Trash2, ArrowUpRight, Camera, Loader2, Key, ExternalLink, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { C, Card } from "./App";
 
@@ -43,6 +43,11 @@ export default function AssignBill({
 
   const [newFriendName, setNewFriendName] = useState("");
   const [rawReceipt, setRawReceipt] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [ocrLoadingText, setOcrLoadingText] = useState("");
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(() => (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
+  const [hasApiKey, setHasApiKey] = useState(() => !!((import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key")));
   const [isExtracting, setIsExtracting] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
@@ -55,11 +60,12 @@ export default function AssignBill({
   const handleExtractAI = () => {
     if (!rawReceipt.trim()) return;
     setIsExtracting(true);
+    setOcrLoadingText(t("split.aiReadingReceipt"));
 
     setTimeout(() => {
       const lines = rawReceipt.split("\n");
       const parsedItems: SplitItem[] = [];
-      let nextId = items.length + 1;
+      let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
 
       lines.forEach((line) => {
         const match = line.match(/(.*?)\$?(\d+(?:\.\d{1,2})?)\s*$/);
@@ -82,7 +88,201 @@ export default function AssignBill({
         setRawReceipt("");
       }
       setIsExtracting(false);
-    }, 1500);
+      setOcrLoadingText("");
+    }, 1200);
+  };
+
+  const handleFileCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtracting(true);
+    setOcrLoadingText("Đang chuẩn bị ảnh hoá đơn...");
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Data = event.target?.result as string;
+      if (base64Data) {
+        await processReceiptImage(base64Data);
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const processReceiptImage = async (base64Data: string) => {
+    try {
+      const mimeType = base64Data.substring(base64Data.indexOf(":") + 1, base64Data.indexOf(";")) || "image/jpeg";
+      const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+      const formattedBase64 = base64Data.startsWith("data:")
+        ? base64Data
+        : `data:${mimeType};base64,${pureBase64}`;
+
+      let parsedItems: { name: string; price: number }[] = [];
+      const openAiApiKey =
+        (import.meta.env.VITE_OPENAI_KEY as string) ||
+        localStorage.getItem("openai_api_key") ||
+        localStorage.getItem("gemini_api_key") ||
+        "";
+
+      const key = openAiApiKey.trim();
+      const isGroq = key.startsWith("gsk_");
+      const apiUrl = isGroq
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://api.openai.com/v1/chat/completions";
+      const modelName = isGroq ? "qwen/qwen3.6-27b" : "gpt-4o";
+
+      setOcrLoadingText(isGroq ? "Đang trích xuất hoá đơn..." : "Đang trích xuất hoá đơn...");
+
+      // 1. Prompt 35: Call Spring Boot Backend (/api/ocr/scan)
+      try {
+        const res = await fetch("http://localhost:8080/api/ocr/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            parsedItems = data;
+          }
+        }
+      } catch (err) {
+        // Backend offline or fallback to client-side REST API
+      }
+
+      // 2. Prompt 34: Direct Client-side REST API (Groq / OpenAI Vision)
+      if (parsedItems.length === 0 && key) {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an advanced financial AI assistant specialized in extracting structured data from receipts and invoices. Analyze the provided image of a receipt and extract the purchased items and the currency used.\n\nYou must respond ONLY with a valid JSON object matching the exact schema below. Do not include any markdown formatting tags (like ```json), explanations, or extra text.\n\nJSON Schema:\n{\n  \"items\": [\n    {\n      \"name\": \"string (The name of the food, drink, or item)\",\n      \"price\": number (The exact price of the item. Do not include currency symbols. Use decimals if necessary, e.g., 15.50 or 150000)\n    }\n  ],\n  \"currency\": \"string (The 3-letter ISO currency code, e.g. 'VND', 'USD')\"\n}\n\nRules:\n1. \"price\" must be a pure number. Remove any commas/dots used as thousand separators (e.g., \"3.565.000\" -> 3565000).\n2. Do not include markdown code block tags.",
+              },
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: formattedBase64,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const rawContent = result.choices?.[0]?.message?.content || "";
+          const cleanText = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```json/g, "").replace(/```/g, "").trim();
+          
+          try {
+            let itemsJson: any[] = [];
+            const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
+            const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+            if (objMatch) {
+              const parsedObj = JSON.parse(objMatch[0]);
+              if (Array.isArray(parsedObj.items)) {
+                itemsJson = parsedObj.items;
+              }
+            } else if (arrayMatch) {
+              itemsJson = JSON.parse(arrayMatch[0]);
+            } else {
+              const directParse = JSON.parse(cleanText);
+              itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+            }
+
+            if (Array.isArray(itemsJson) && itemsJson.length > 0) {
+              parsedItems = itemsJson.map((it: any) => ({
+                name: String(it.name || it.item || it.description || t("common.unnamed")).trim(),
+                price: Number(String(it.price || it.amount || it.total || 0).replace(/[^0-9.]/g, "")) || 0
+              }));
+            }
+          } catch (jsonErr) {
+            console.error("Failed to parse OCR JSON:", jsonErr);
+          }
+        } else {
+          console.error("AI API Error status:", response.status);
+        }
+      }
+
+      // 3. Fallback: Try Gemini 1.5 Flash Vision if Gemini Key exists
+      const geminiKey =
+        (import.meta.env.VITE_GEMINI_KEY as string) ||
+        localStorage.getItem("gemini_api_key") ||
+        "";
+
+      if (parsedItems.length === 0 && geminiKey) {
+        setOcrLoadingText("Đang quét hoá đơn");
+        try {
+          const promptText = `Bạn là một máy đọc hoá đơn nhà hàng (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng. Tuyệt đối KHÔNG trả về markdown, giải thích hay text nào khác. CHỈ trả về một mảng JSON theo format: [ { "name": "Tên món 1", "price": 15.5 }, { "name": "Tên món 2", "price": 5.0 } ]. Bỏ qua thuế và tip.`;
+
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      { text: promptText },
+                      {
+                        inlineData: {
+                          mimeType: mimeType,
+                          data: pureBase64,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            }
+          );
+
+          if (response.ok) {
+            const result = await response.json();
+            const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+            const itemsJson = JSON.parse(cleanJson);
+            if (Array.isArray(itemsJson)) {
+              parsedItems = itemsJson;
+            }
+          }
+        } catch (gemErr) {
+          console.error("Gemini API error:", gemErr);
+        }
+      }
+
+      // 4. Update food items state with parsed items from receipt
+      if (parsedItems.length > 0) {
+        let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
+        const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
+          id: nextId++,
+          name: item.name,
+          price: typeof item.price === "number" ? item.price : parseFloat(item.price as any) || 0,
+          consumers: [],
+        }));
+        setItems((prev) => [...prev, ...newSplitItems]);
+      }
+    } catch (e) {
+      console.error("OpenAI Camera OCR processing error:", e);
+    } finally {
+      setIsExtracting(false);
+      setOcrLoadingText("");
+    }
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -146,19 +346,29 @@ export default function AssignBill({
     itemShares[p] = 0;
   });
 
+  // Prompt 36: 1. Calculate unassigned / shared items total
+  const unassignedItems = items.filter((item) => item.consumers.length === 0);
+  const totalSharedAmount = unassignedItems.reduce((sum, item) => sum + item.price, 0);
+
+  // Prompt 36: 2. Calculate shared share per person
+  const sharedAmountPerPerson = numPeople > 0 ? totalSharedAmount / numPeople : 0;
+
+  // Prompt 36: 3. Calculate assigned item costs per person
   items.forEach((item) => {
-    if (item.consumers.length === 0) return;
-    const pricePerPerson = item.price / item.consumers.length;
-    item.consumers.forEach((c) => {
-      if (itemShares[c] !== undefined) {
-        itemShares[c] += pricePerPerson;
-      }
-    });
+    if (item.consumers.length > 0) {
+      const pricePerPerson = item.price / item.consumers.length;
+      item.consumers.forEach((c) => {
+        if (itemShares[c] !== undefined) {
+          itemShares[c] += pricePerPerson;
+        }
+      });
+    }
   });
 
   const tipShare = numPeople > 0 ? tip / numPeople : 0;
   const debts = allParticipants.map((p) => {
-    const personalItemCost = itemShares[p] || 0;
+    const assignedItemCost = itemShares[p] || 0;
+    const personalItemCost = assignedItemCost + sharedAmountPerPerson;
     const personalTax = personalItemCost * (taxPercent / 100);
     const totalDue = personalItemCost + personalTax + tipShare;
     return {
@@ -298,9 +508,11 @@ export default function AssignBill({
       <div className="px-5 md:px-0 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 pb-10">
         <div className="lg:col-span-8 flex flex-col gap-6">
           <Card className="p-4 md:p-6">
-            <h3 className="text-[16px] font-semibold text-white mb-3 flex items-center gap-2 font-sans">
-              <Sparkles size={16} color={C.gold} /> {t("split.ocrTitle")}
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[16px] font-semibold text-white flex items-center gap-2 font-sans">
+                <Sparkles size={16} color={C.gold} /> {t("split.ocrTitle")}
+              </h3>
+            </div>
             <p className="text-xs text-tm mb-4 font-sans leading-relaxed">
               {t("split.ocrHint")}
             </p>
@@ -312,7 +524,30 @@ export default function AssignBill({
               className="w-full px-4 py-3 rounded-xl border text-sm text-white bg-surf outline-none focus:border-gold resize-none"
               style={{ borderColor: C.border }}
             />
-            <div className="flex justify-end mt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+              {/* Hidden file input for Camera Capture / File select */}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={fileInputRef}
+                onChange={handleFileCapture}
+                className="hidden"
+              />
+
+              {/* Camera OCR Trigger Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isExtracting}
+                className="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 cursor-pointer transition-all hover:bg-surf/80 border text-xs disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                style={{ borderColor: C.border, background: C.surf + "50", color: C.white }}
+              >
+                <Camera size={15} color={C.gold} />
+                <span>{t("split.cameraOcrBtn")}</span>
+              </button>
+
+              {/* Text Extract Button */}
               <button
                 type="button"
                 onClick={handleExtractAI}
@@ -369,7 +604,7 @@ export default function AssignBill({
                           <div className="min-w-0">
                             <h4 className="font-bold text-[15px] text-white truncate">{item.name}</h4>
                             <p className="text-xs text-tm mt-0.5" style={{ color: C.gold }}>
-                              ${item.price.toFixed(2)}
+                              ${item.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                             </p>
                           </div>
                           <button
@@ -385,9 +620,7 @@ export default function AssignBill({
                         </div>
 
                         <div className="flex flex-wrap gap-1.5 min-h-[22px] font-sans">
-                          {item.consumers.length === 0 ? (
-                            <span className="text-[11px] italic text-tm opacity-60">Unassigned</span>
-                          ) : (
+                          {item.consumers.length === 0 ? null : (
                             item.consumers.map((c) => (
                               <span
                                 key={c}
@@ -527,7 +760,7 @@ export default function AssignBill({
 
             {/* Bill Title Input */}
             <div className="flex flex-col gap-1.5 mb-4">
-              <label className="text-[11px] text-tm uppercase font-bold tracking-wider pl-0.5">{t("split.billTitle")}</label>
+              <label className="text-xs font-semibold text-tm pl-0.5">{t("split.billTitle")}</label>
               <input
                 type="text"
                 placeholder={t("split.billTitlePlaceholder")}
@@ -539,7 +772,7 @@ export default function AssignBill({
             </div>
 
             <div className="flex flex-col gap-1.5 mb-4">
-              <label className="text-[11px] text-tm uppercase font-bold tracking-wider pl-0.5">{t("split.whoPaid")}</label>
+              <label className="text-xs font-semibold text-tm pl-0.5">{t("split.whoPaid")}</label>
               <select
                 value={activePayer}
                 onChange={(e) => setPayer(e.target.value)}
@@ -554,43 +787,52 @@ export default function AssignBill({
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-2 gap-3 mb-6 font-sans">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-tm uppercase font-bold tracking-wider">{t("split.tax")}</label>
+                <label className="text-xs font-semibold text-tm pl-0.5">{t("split.tax")}</label>
                 <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={taxPercent}
-                  onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-sm text-white bg-surf outline-none focus:border-gold"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={taxPercent === 0 ? "" : taxPercent}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                    setTaxPercent(raw === "" ? 0 : parseFloat(raw) || 0);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm text-white bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-tm uppercase font-bold tracking-wider">{t("split.tip")}</label>
+                <label className="text-xs font-semibold text-tm pl-0.5">{t("split.tip")}</label>
                 <input
-                  type="number"
-                  min="0"
-                  value={tip}
-                  onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-sm text-white bg-surf outline-none focus:border-gold"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={tip === 0 ? "" : tip}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                    setTip(raw === "" ? 0 : parseFloat(raw) || 0);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm text-white bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-3.5 mb-6">
-              <h4 className="text-[12px] text-tm uppercase font-bold tracking-wider mb-1">{t("split.debtsDistribution")}</h4>
+              <h4 className="text-xs font-semibold text-tm pl-0.5 mb-1">{t("split.debtsDistribution")}</h4>
               {debts.map((debt) => (
                 <div key={debt.name} className="flex items-center justify-between text-sm py-1.5 border-b border-solid" style={{ borderColor: C.border + "50" }}>
                   <div>
                     <p className="font-semibold text-white">{debt.name}</p>
                     <p className="text-[10px] text-tm mt-0.5">
-                      {t("split.items")}: ${debt.itemCost.toFixed(2)} + {t("split.taxLabel")}: ${debt.tax.toFixed(2)}
+                      {t("split.items")}: ${debt.itemCost.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} + {t("split.taxLabel")}: ${debt.tax.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </p>
                   </div>
-                  <span className="font-bold text-gold text-[15px]">${debt.total.toFixed(2)}</span>
+                  <span className="font-bold text-gold text-[15px]">${debt.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                 </div>
               ))}
             </div>
@@ -598,20 +840,20 @@ export default function AssignBill({
             <div className="p-4 rounded-xl flex flex-col gap-2.5 mb-4" style={{ background: C.surf + "40" }}>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.itemsSubtotal")}:</span>
-                <span className="font-semibold text-white">${subtotal.toFixed(2)}</span>
+                <span className="font-semibold text-white">${subtotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.taxLabel")} ({taxPercent}%):</span>
-                <span className="font-semibold text-white">${totalTax.toFixed(2)}</span>
+                <span className="font-semibold text-white">${totalTax.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.flatTip")}:</span>
-                <span className="font-semibold text-white">${tip.toFixed(2)}</span>
+                <span className="font-semibold text-white">${tip.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="h-px bg-border my-1.5" style={{ background: C.border }} />
               <div className="flex justify-between text-sm font-bold text-white">
                 <span className="flex items-center gap-1"><ArrowUpRight size={14} color={C.gold} /> {t("split.totalBill")}:</span>
-                <span className="text-gold text-[16px]">${grandTotal.toFixed(2)}</span>
+                <span className="text-gold text-[16px]">${grandTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
@@ -672,6 +914,26 @@ export default function AssignBill({
               </button>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Fullscreen AI Reading Receipt Overlay Spinner */}
+      <AnimatePresence>
+        {isExtracting && (
+          <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="p-6 md:p-8 rounded-3xl border border-white/10 flex flex-col items-center gap-4 bg-[#141416] shadow-2xl text-center max-w-xs mx-auto"
+            >
+              <Loader2 size={40} color={C.gold} className="animate-spin" />
+              <div>
+                <p className="text-base font-bold text-white font-sans">{ocrLoadingText || t("split.aiReadingReceipt")}</p>
+                <span className="text-xs text-tm font-sans mt-1 block">{t("split.aiReadingHint")}</span>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </>
