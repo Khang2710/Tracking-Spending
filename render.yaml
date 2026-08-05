@@ -4,7 +4,7 @@ services:
     name: spending-tracker-backend
     env: docker
     dockerContext: backend
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: Dockerfile
     plan: free
     region: singapore # or oregon / frankfurt
     envVars:
