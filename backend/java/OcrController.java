@@ -8,7 +8,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/ocr")
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*")
 public class OcrController {
 
     private final OcrService ocrService;

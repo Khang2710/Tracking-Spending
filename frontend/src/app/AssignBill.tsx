@@ -136,7 +136,8 @@ export default function AssignBill({
 
       // 1. Prompt 35: Call Spring Boot Backend (/api/ocr/scan)
       try {
-        const res = await fetch("http://localhost:8080/api/ocr/scan", {
+        const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+        const res = await fetch(`${backendHost}/api/ocr/scan`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
@@ -165,7 +166,7 @@ export default function AssignBill({
               {
                 role: "system",
                 content:
-                  "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price). Ví dụ: Nếu món ăn có số lượng 3.1 và đơn giá 1.150.000, thì 'price' trích xuất phải là 3565000.\n3. Loại bỏ toàn bộ dấu phẩy/chấm phân cách hàng nghìn (ví dụ: 3.565.000 phải viết thành 3565000).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về mảng JSON theo format chuẩn:\n[\n  { \"name\": \"Tên món 1\", \"price\": 150000 },\n  { \"name\": \"Tên món 2\", \"price\": 3565000 }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
+                  "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
               },
               {
                 role: "user",
@@ -205,10 +206,22 @@ export default function AssignBill({
             }
 
             if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-              parsedItems = itemsJson.map((it: any) => ({
-                name: String(it.name || it.item || it.description || t("common.unnamed")).trim(),
-                price: Number(String(it.price || it.amount || it.total || 0).replace(/[^0-9.]/g, "")) || 0
-              }));
+              parsedItems = itemsJson.map((it: any) => {
+                const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
+                const rawPrice = it.price || it.amount || it.total || 0;
+                let price = 0;
+                if (typeof rawPrice === "number") {
+                  price = rawPrice;
+                } else {
+                  const strP = String(rawPrice).trim();
+                  if (/^.*\.\d{2}$/.test(strP)) {
+                    price = parseFloat(strP.replace(/[^0-9.]/g, "")) || 0;
+                  } else {
+                    price = parseFloat(strP.replace(/[^0-9]/g, "")) || 0;
+                  }
+                }
+                return { name, price };
+              });
             }
           } catch (jsonErr) {
             console.error("Failed to parse OCR JSON:", jsonErr);

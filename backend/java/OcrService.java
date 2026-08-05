@@ -79,15 +79,13 @@ public class OcrService {
             systemMessage.put("content", "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\n" +
                     "YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n" +
                     "1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n" +
-                    "2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price). Ví dụ: Nếu món ăn có số lượng 3.1 và đơn giá 1.150.000, thì 'price' trích xuất phải là 3565000.\n" +
-                    "3. Loại bỏ toàn bộ dấu phẩy/chấm phân cách hàng nghìn (ví dụ: 3.565.000 phải viết thành 3565000).\n\n" +
-                    "Tuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về mảng JSON hoặc object JSON theo schema:\n" +
-                    "{\n" +
-                    "  \"items\": [\n" +
-                    "    { \"name\": \"Tên món\", \"price\": 3565000 }\n" +
-                    "  ],\n" +
-                    "  \"currency\": \"VND\"\n" +
-                    "}\n" +
+                    "2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n" +
+                    "3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\n" +
+                    "Tuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n" +
+                    "[\n" +
+                    "  { \"name\": \"Tên món 1\", \"price\": \"15.000\" },\n" +
+                    "  { \"name\": \"Tên món 2\", \"price\": \"3.565.000\" }\n" +
+                    "]\n" +
                     "Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.");
 
             Map<String, Object> imageUrlObj = new HashMap<>();
@@ -164,15 +162,7 @@ public class OcrService {
 
                     if (nameObj != null) {
                         String name = nameObj.toString().trim();
-                        double price = 0.0;
-                        if (priceObj != null) {
-                            try {
-                                String priceStr = priceObj.toString().replaceAll("[^0-9.]", "");
-                                if (!priceStr.isEmpty()) {
-                                    price = Double.parseDouble(priceStr);
-                                }
-                            } catch (Exception ignored) {}
-                        }
+                        double price = parsePrice(priceObj);
                         if (!name.isEmpty()) {
                             items.add(new FoodItemDto(name, price));
                         }
@@ -184,5 +174,22 @@ public class OcrService {
         }
 
         return items;
+    }
+
+    private double parsePrice(Object priceObj) {
+        if (priceObj == null) return 0.0;
+        if (priceObj instanceof Number) return ((Number) priceObj).doubleValue();
+        String str = priceObj.toString().trim();
+        if (str.isEmpty()) return 0.0;
+
+        if (str.matches("^.*\\.\\d{2}$")) {
+            String clean = str.replaceAll("[^0-9.]", "");
+            try { return Double.parseDouble(clean); } catch (Exception ignored) {}
+        }
+        String digits = str.replaceAll("[^0-9]", "");
+        if (!digits.isEmpty()) {
+            try { return Double.parseDouble(digits); } catch (Exception ignored) {}
+        }
+        return 0.0;
     }
 }

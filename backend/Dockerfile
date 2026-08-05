@@ -1,23 +1,23 @@
-# Stage 1: Build the application using Maven
-FROM maven:3.9.6-eclipse-temurin-17 AS builder
+# Stage 1: Build the Maven application using JDK 17
+FROM maven:3.9.6-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copy the pom.xml and the source code
+# Copy pom.xml and source code
 COPY pom.xml .
 COPY java ./java
 
-# Build the application
+# Package application (skip tests for fast build)
 RUN mvn clean package -DskipTests
 
-# Stage 2: Create a minimal image to run the app
-FROM eclipse-temurin:17-jre-alpine
+# Stage 2: Minimal Java Runtime environment
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Copy the built jar file from the builder stage
-COPY --from=builder /app/target/backend-1.0.0.jar app.jar
+# Copy compiled JAR artifact from build stage
+COPY --from=build /app/target/backend-1.0.0.jar app.jar
 
-# Expose the application port
+# Render assigns a dynamic PORT environment variable (default 8080)
 EXPOSE 8080
+ENV PORT=8080
 
-# Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]

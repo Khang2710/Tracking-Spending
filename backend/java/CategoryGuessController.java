@@ -8,8 +8,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/transactions")
-@CrossOrigin(origins = "*")
+@RequestMapping("/api/ai")
+@CrossOrigin(originPatterns = "*")
 public class CategoryGuessController {
 
     private final CategoryGuessService categoryGuessService;

@@ -1,11 +1,16 @@
+# Render Blueprint specification for Spending Tracker Backend
 services:
   - type: web
-    name: tracking-spending-backend
+    name: spending-tracker-backend
     env: docker
-    rootDir: backend
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
     plan: free
+    region: singapore # or oregon / frankfurt
     envVars:
+      - key: PORT
+        value: 8080
       - key: OPENAI_KEY
-        sync: false
+        sync: false # Set securely in Render Dashboard (gsk_... or sk-...)
       - key: GEMINI_API_KEY
         sync: false

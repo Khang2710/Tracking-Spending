@@ -10,7 +10,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ai")
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*")
 public class AiNudgeController {
 
     private final AiNudgeService aiNudgeService;
