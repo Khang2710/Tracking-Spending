@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tracking-spending-backend
+    env: docker
+    rootDir: backend
+    plan: free
+    envVars:
+      - key: OPENAI_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
