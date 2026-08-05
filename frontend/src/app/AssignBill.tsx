@@ -25,6 +25,9 @@ interface AssignBillProps {
   onAddTransaction?: (tx: Omit<Transaction, "id">, walletId?: number) => void;
 }
 
+import { compressImage } from "./utils/imageCompressor";
+import { useCurrency } from "./context/CurrencyContext";
+
 export default function AssignBill({
   friends,
   onAddFriend,
@@ -36,6 +39,7 @@ export default function AssignBill({
   onAddTransaction,
 }: AssignBillProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(10);
@@ -92,22 +96,44 @@ export default function AssignBill({
     }, 1200);
   };
 
-  const handleFileCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Prompt 37: 2. Animated Loading Text Rotation
+  useEffect(() => {
+    if (!isExtracting) return;
+    const loadingMessages = [
+      "Đang tải ảnh lên...",
+      "AI đang đọc hoá đơn...",
+      "Đang bóc tách giá tiền...",
+      "Đang hoàn tất phân tích...",
+    ];
+    let step = 0;
+    setOcrLoadingText(loadingMessages[0]);
+    const interval = setInterval(() => {
+      step = (step + 1) % loadingMessages.length;
+      setOcrLoadingText(loadingMessages[step]);
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [isExtracting]);
+
+  // Prompt 37: 1. Compress image via canvas before sending
+  const handleFileCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsExtracting(true);
-    setOcrLoadingText("Đang chuẩn bị ảnh hoá đơn...");
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64Data = event.target?.result as string;
-      if (base64Data) {
-        await processReceiptImage(base64Data);
-      }
+    try {
+      const compressedBase64 = await compressImage(file, 800, 0.6);
+      await processReceiptImage(compressedBase64);
+    } catch (err) {
+      console.error("Image compression error:", err);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result as string;
+        if (base64Data) await processReceiptImage(base64Data);
+      };
+      reader.readAsDataURL(file);
+    } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const processReceiptImage = async (base64Data: string) => {
@@ -618,7 +644,7 @@ export default function AssignBill({
                           <div className="min-w-0">
                             <h4 className="font-bold text-[15px] text-white truncate">{item.name}</h4>
                             <p className="text-xs text-tm mt-0.5" style={{ color: C.gold }}>
-                              ${item.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              {formatCurrency(item.price)}
                             </p>
                           </div>
                           <button
@@ -843,10 +869,10 @@ export default function AssignBill({
                   <div>
                     <p className="font-semibold text-white">{debt.name}</p>
                     <p className="text-[10px] text-tm mt-0.5">
-                      {t("split.items")}: ${debt.itemCost.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} + {t("split.taxLabel")}: ${debt.tax.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      {t("split.items")}: {formatCurrency(debt.itemCost)} + {t("split.taxLabel")}: {formatCurrency(debt.tax)}
                     </p>
                   </div>
-                  <span className="font-bold text-gold text-[15px]">${debt.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                  <span className="font-bold text-gold text-[15px]">{formatCurrency(debt.total)}</span>
                 </div>
               ))}
             </div>
@@ -854,20 +880,20 @@ export default function AssignBill({
             <div className="p-4 rounded-xl flex flex-col gap-2.5 mb-4" style={{ background: C.surf + "40" }}>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.itemsSubtotal")}:</span>
-                <span className="font-semibold text-white">${subtotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                <span className="font-semibold text-white">{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.taxLabel")} ({taxPercent}%):</span>
-                <span className="font-semibold text-white">${totalTax.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                <span className="font-semibold text-white">{formatCurrency(totalTax)}</span>
               </div>
               <div className="flex justify-between text-xs text-tm">
                 <span>{t("split.flatTip")}:</span>
-                <span className="font-semibold text-white">${tip.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                <span className="font-semibold text-white">{formatCurrency(tip)}</span>
               </div>
               <div className="h-px bg-border my-1.5" style={{ background: C.border }} />
               <div className="flex justify-between text-sm font-bold text-white">
                 <span className="flex items-center gap-1"><ArrowUpRight size={14} color={C.gold} /> {t("split.totalBill")}:</span>
-                <span className="text-gold text-[16px]">${grandTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                <span className="text-gold text-[16px]">{formatCurrency(grandTotal)}</span>
               </div>
             </div>
 

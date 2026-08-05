@@ -70,13 +70,16 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// CHỈ RENDER 1 LẦN DUY NHẤT Ở ĐÂY
+import { CurrencyProvider } from "./app/context/CurrencyContext";
+
 const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <App />
+        <CurrencyProvider>
+          <App />
+        </CurrencyProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );

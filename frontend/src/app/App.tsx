@@ -398,6 +398,7 @@ function HomeScreen({
   onDeleteTransaction,
 }: HomeScreenProps) {
   const { t, i18n } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const totalBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
 
   // Compute current month name, days in month, days remaining, and outcome dynamically
@@ -483,22 +484,16 @@ function HomeScreen({
               </p>
               <div className="flex items-baseline gap-0.5">
                 <span
-                  className="text-[28px] font-bold tracking-tight leading-none"
+                  className="text-[24px] md:text-[28px] font-bold tracking-tight leading-none"
                   style={{ color: C.white }}
                 >
-                  ${totalBalance.toLocaleString()}
-                </span>
-                <span
-                  className="text-[17px] font-semibold"
-                  style={{ color: C.t2 }}
-                >
-                  .00
+                  {formatCurrency(totalBalance)}
                 </span>
               </div>
               <div className="flex items-center gap-1 mt-1">
                 <ArrowDownRight size={12} color={C.red} strokeWidth={2.5} />
                 <span className="text-[12px]" style={{ color: C.tm }}>
-                  ${totalCurrentOutcome.toLocaleString()} · {currentMonthName} {currentYear}
+                  {formatCurrency(totalCurrentOutcome)} · {currentMonthName} {currentYear}
                 </span>
               </div>
             </div>
@@ -541,16 +536,16 @@ function HomeScreen({
                   className="text-[22px] md:text-[28px] font-bold"
                   style={{ color: C.gold }}
                 >
-                  ${totalCurrentOutcome.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  {formatCurrency(totalCurrentOutcome)}
                 </span>
                 <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
-                  / ${budget.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  / {formatCurrency(budget)}
                 </span>
               </div>
               <ProgressBar value={totalCurrentOutcome} max={budget} color={progressColor} />
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[12px] md:text-[14px]" style={{ color: C.tm }}>
-                  {t("dashboard.dailyAvg")}: ${(totalCurrentOutcome / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} – {t("dashboard.limit")}: ${(budget / currentMonthDays).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  {t("dashboard.dailyAvg")}: {formatCurrency(totalCurrentOutcome / currentMonthDays)} – {t("dashboard.limit")}: {formatCurrency(budget / currentMonthDays)}
                 </span>
                 <span
                   className="text-[12px] md:text-[14px] font-semibold"
@@ -574,7 +569,7 @@ function HomeScreen({
                 >
                   <span className="text-xs md:text-sm font-bold leading-relaxed">
                     {t("dashboard.budgetAlertDanger", {
-                      amount: `$${overAmount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+                      amount: formatCurrency(overAmount),
                     })}
                   </span>
                 </motion.div>
@@ -656,7 +651,7 @@ function HomeScreen({
                         className="text-[20px] font-bold tracking-tight"
                         style={{ color: C.white }}
                       >
-                        ${w.balance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {formatCurrency(w.balance)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between relative z-10">
@@ -746,7 +741,7 @@ function HomeScreen({
                         className="text-[14px] font-bold"
                         style={{ color: isPositive ? C.green : C.red }}
                       >
-                        {isPositive ? "+" : "-"}${Math.abs(t.amount).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {isPositive ? "+" : "-"}{formatCurrency(Math.abs(t.amount))}
                       </span>
                       {/* Delete button – shows on hover */}
                       <motion.button
@@ -797,6 +792,7 @@ function StatisticsScreen({
   onDeleteGoal,
 }: StatisticsScreenProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
   const [statsView, setStatsView] = useState<"stats" | "goals">("stats");
 
@@ -1001,9 +997,9 @@ function StatisticsScreen({
                 style={{ borderTop: `1px solid ${C.border}` }}
               >
                 {[
-                  { label: t("stats.income"), value: `$${activeMonthData.income.toLocaleString()}`, color: C.green },
-                  { label: t("stats.outcome"), value: `$${activeMonthData.outcome.toLocaleString()}`, color: C.red },
-                  { label: t("stats.savings"), value: `$${activeMonthData.savings.toLocaleString()}`, color: C.gold },
+                  { label: t("stats.income"), value: formatCurrency(activeMonthData.income), color: C.green },
+                  { label: t("stats.outcome"), value: formatCurrency(activeMonthData.outcome), color: C.red },
+                  { label: t("stats.savings"), value: formatCurrency(activeMonthData.savings), color: C.gold },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -1055,17 +1051,17 @@ function StatisticsScreen({
                   className="text-[22px] md:text-[28px] font-bold"
                   style={{ color: C.gold }}
                 >
-                  ${totalMonthOutcome.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  {formatCurrency(totalMonthOutcome)}
                 </span>
                 <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
-                  / ${budget.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  / {formatCurrency(budget)}
                 </span>
               </div>
               <ProgressBar value={totalMonthOutcome} max={budget} color={C.gold} delay={0.1} />
               <p className="text-[12px] md:text-[14px] mt-3" style={{ color: C.tm }}>
-                {t("stats.dailyLimit")}: ${(budget / 30).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ·{" "}
+                {t("stats.dailyLimit")}: {formatCurrency(budget / 30)} ·{" "}
                 <span style={{ color: C.green, fontWeight: 600 }}>
-                  {t("stats.saved")} ${saved.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  {t("stats.saved")} {formatCurrency(saved)}
                 </span>
               </p>
             </Card>
@@ -1122,7 +1118,7 @@ function StatisticsScreen({
                             className="text-[15px] font-bold"
                             style={{ color: C.red }}
                           >
-                            -${Math.abs(cat.amount).toFixed(2)}
+                            -{formatCurrency(Math.abs(cat.amount))}
                           </span>
                         </div>
                         <span
@@ -1151,8 +1147,6 @@ function StatisticsScreen({
   );
 }
 
-// ─── INVESTMENT SCREEN ────────────────────────────────────────────────────────
-// ─── GOAL ICON RESOLVER ────────────────────────────────────────────────────────
 const goalIconOptions = [
   { key: "PiggyBank", Icon: PiggyBank, label: "Hũ" },
   { key: "Car", Icon: Car, label: "Xe" },
@@ -1178,13 +1172,14 @@ function resolveGoalIcon(iconKey: string) {
 }
 
 // ─── GOAL CARD ────────────────────────────────────────────────────────────────
-function GoalCard({
+function SavingsGoalCard({
   goal,
   onClick,
 }: {
   goal: SavingsGoal;
   onClick: (g: SavingsGoal) => void;
 }) {
+  const { formatCurrency } = useCurrency();
   const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
   const targetAmount = typeof goal?.targetAmount === "number" ? goal.targetAmount : Number(goal?.targetAmount) || 0;
   const pct = targetAmount > 0
@@ -1261,10 +1256,10 @@ function GoalCard({
 
         <div className="flex items-center justify-between">
           <span className="text-[12px]" style={{ color: C.tm }}>
-            ${currentAmount.toLocaleString()}
+            {formatCurrency(currentAmount)}
           </span>
           <span className="text-[12px] font-semibold" style={{ color: C.t2 }}>
-            / ${targetAmount.toLocaleString()}
+            / {formatCurrency(targetAmount)}
           </span>
         </div>
       </Card>
@@ -1885,6 +1880,8 @@ function Sidebar({
   );
 }
 
+import { useCurrency } from "./context/CurrencyContext";
+
 function LanguageToggle() {
   const { i18n } = useTranslation();
   const currentLang = i18n.language || "vi";
@@ -1909,6 +1906,25 @@ function LanguageToggle() {
       title={currentLang.startsWith("vi") ? "Switch to English" : "Chuyển sang Tiếng Việt"}
     >
       <span>{currentLang.startsWith("vi") ? "🇻🇳 VI" : "🇺🇸 EN"}</span>
+    </button>
+  );
+}
+
+function CurrencyToggle() {
+  const { currency, toggleCurrency } = useCurrency();
+
+  return (
+    <button
+      onClick={toggleCurrency}
+      className="px-3 py-1.5 rounded-xl font-semibold text-[11px] transition-all duration-300 hover:border-gold/30 hover:bg-surf/40 cursor-pointer border flex items-center gap-1.5"
+      style={{
+        background: C.card,
+        borderColor: C.border,
+        color: C.gold,
+      }}
+      title={currency === "VND" ? "Chuyển sang USD ($)" : "Chuyển sang VND (₫)"}
+    >
+      <span>{currency === "VND" ? "🇻🇳 ₫ VND" : "🇺🇸 $ USD"}</span>
     </button>
   );
 }
@@ -3099,7 +3115,8 @@ export default function App() {
                 <span className="hidden sm:inline">{t("dashboard.newTransaction")}</span>
               </motion.button>
 
-              {/* Language Toggle - always visible on header for both mobile and desktop */}
+              {/* Currency & Language Toggles */}
+              <CurrencyToggle />
               <LanguageToggle />
             </div>
           </header>

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import confetti from "canvas-confetti";
 import { C, Card } from "./App";
 import { NudgeButton } from "./components/NudgeButton";
+import { useCurrency } from "./context/CurrencyContext";
 
 interface TransactionRecord {
   date: string;
@@ -34,6 +35,8 @@ export default function DebtBalances({
   onRemoveFriend,
   onSettleTransaction,
 }: DebtBalancesProps) {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [selectedFriend, setSelectedFriend] = useState<FriendBalanceItem | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
@@ -177,7 +180,7 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
                       isSettled ? "text-tm" : isLent ? "text-green-500" : "text-red-500"
                     }`}
                   >
-                    {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                    {isSettled ? "" : formatCurrency(item.balance)}
                   </p>
                   <span
                     className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mt-1 ${
@@ -221,6 +224,7 @@ function DebtDetailModal({
   onSettleTransaction,
 }: DebtDetailModalProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const isLent = friend.balance > 0;
   const isSettled = friend.balance === 0;
   const absBalance = Math.abs(friend.balance);
@@ -291,7 +295,7 @@ function DebtDetailModal({
                 isSettled ? "text-white" : isLent ? "text-green-500" : "text-red-500"
               }`}
             >
-              {isSettled ? "" : isLent ? "+" : "-"}${absBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+              {isSettled ? "" : formatCurrency(friend.balance)}
             </h2>
             <p className="text-xs text-tm mt-2">
               {isSettled
@@ -335,7 +339,7 @@ function DebtDetailModal({
                       <div className="flex justify-between items-baseline gap-2">
                         <span className="font-semibold text-white text-[13px] truncate">{record.description}</span>
                         <span className={`font-bold text-[13px] ${record.isLent ? "text-green-400" : "text-red-400"}`}>
-                          {record.isLent ? "+" : "-"}${record.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                          {record.isLent ? "+" : "-"}{formatCurrency(record.amount)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
