@@ -121,6 +121,7 @@ export default function AssignBill({
       let parsedItems: { name: string; price: number }[] = [];
       const openAiApiKey =
         (import.meta.env.VITE_OPENAI_KEY as string) ||
+        (import.meta.env.VITE_GROQ_KEY as string) ||
         localStorage.getItem("openai_api_key") ||
         localStorage.getItem("gemini_api_key") ||
         "";
