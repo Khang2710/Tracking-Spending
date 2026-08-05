@@ -76,22 +76,19 @@ public class OcrService {
 
             Map<String, Object> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "You are an advanced financial AI assistant specialized in extracting structured data from receipts and invoices. " +
-                    "Analyze the provided image of a receipt and extract the purchased items and the currency used.\n\n" +
-                    "You must respond ONLY with a valid JSON object matching the exact schema below. Do not include any markdown formatting tags (like ```json), explanations, or extra text.\n\n" +
-                    "JSON Schema:\n" +
+            systemMessage.put("content", "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\n" +
+                    "YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n" +
+                    "1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n" +
+                    "2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price). Ví dụ: Nếu món ăn có số lượng 3.1 và đơn giá 1.150.000, thì 'price' trích xuất phải là 3565000.\n" +
+                    "3. Loại bỏ toàn bộ dấu phẩy/chấm phân cách hàng nghìn (ví dụ: 3.565.000 phải viết thành 3565000).\n\n" +
+                    "Tuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về mảng JSON hoặc object JSON theo schema:\n" +
                     "{\n" +
                     "  \"items\": [\n" +
-                    "    {\n" +
-                    "      \"name\": \"string (The name of the food, drink, or item)\",\n" +
-                    "      \"price\": number (The exact price of the item. Do not include currency symbols. Use decimals if necessary, e.g., 15.50 or 150000)\n" +
-                    "    }\n" +
+                    "    { \"name\": \"Tên món\", \"price\": 3565000 }\n" +
                     "  ],\n" +
-                    "  \"currency\": \"string (The 3-letter ISO currency code, e.g. 'VND', 'USD')\"\n" +
-                    "}\n\n" +
-                    "Rules:\n" +
-                    "1. \"price\" must be a pure number. Remove any commas/dots used as thousand separators (e.g., \"3.565.000\" -> 3565000).\n" +
-                    "2. Do not include markdown code block tags.");
+                    "  \"currency\": \"VND\"\n" +
+                    "}\n" +
+                    "Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.");
 
             Map<String, Object> imageUrlObj = new HashMap<>();
             imageUrlObj.put("url", formattedBase64);

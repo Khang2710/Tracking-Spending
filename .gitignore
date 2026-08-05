@@ -12,3 +12,5 @@ pnpm-debug.log*
 *.log
 .agent/
 brain/
+.vercel
+.env*
