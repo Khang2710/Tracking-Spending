@@ -289,7 +289,7 @@ export default function AssignBill({
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            parsedItems = data;
+            parsedItems = sanitizeParsedItems(data);
           }
         }
       } catch (proxyErr) {
@@ -371,7 +371,7 @@ export default function AssignBill({
         }
       }
 
-      // 2. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
+      // 3. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
       if (parsedItems.length === 0) {
         try {
           const backendHost = import.meta.env.VITE_BACKEND_URL || "https://tracking-spending-backend.onrender.com";
@@ -395,10 +395,13 @@ export default function AssignBill({
         }
       }
 
+      // ALWAYS sanitize final parsed items right before state update
+      const finalItems = sanitizeParsedItems(parsedItems);
+
       // 4. Update food items state with parsed items from receipt
-      if (parsedItems.length > 0) {
+      if (finalItems.length > 0) {
         let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-        const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
+        const newSplitItems: SplitItem[] = finalItems.map((item) => ({
           id: nextId++,
           name: item.name,
           price: typeof item.price === "number" ? item.price : parseFloat(item.price as any) || 0,
