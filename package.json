@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm install && npm run build"
+    "build": "cd frontend && npm install --legacy-peer-deps && npm run build"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
