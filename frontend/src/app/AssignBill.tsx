@@ -157,7 +157,7 @@ export default function AssignBill({
       const apiUrl = isGroq
         ? "https://api.groq.com/openai/v1/chat/completions"
         : "https://api.openai.com/v1/chat/completions";
-      const modelName = isGroq ? "qwen/qwen3.6-27b" : "gpt-4o";
+      const modelName = isGroq ? "llama-3.2-11b-vision-preview" : "gpt-4o";
 
       setOcrLoadingText(isGroq ? "Đang trích xuất hoá đơn..." : "Đang trích xuất hoá đơn...");
 
