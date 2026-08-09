@@ -53,6 +53,35 @@ function parsePriceHelper(rawPrice: any): number {
   return parseFloat(cleanVnd) || 0;
 }
 
+function sanitizeParsedItems(items: { name: string; price: number }[]): { name: string; price: number }[] {
+  if (!items || items.length === 0) return [];
+
+  const valid = items.map((it) => ({
+    name: String(it.name || "Món ăn").trim(),
+    price: (typeof it.price === "number" && !isNaN(it.price) && isFinite(it.price)) ? Math.abs(it.price) : 0,
+  }));
+
+  const normalPrices = valid.map((i) => i.price).filter((p) => p > 0 && p < 5000000).sort((a, b) => a - b);
+  const medianPrice = normalPrices.length > 0 ? normalPrices[Math.floor(normalPrices.length / 2)] : 30000;
+
+  return valid.map((item) => {
+    let p = item.price;
+    // Anomaly detection: if item price is more than 20x median price or > 5,000,000 VND
+    if (p > 5000000 || (normalPrices.length >= 3 && p > medianPrice * 20)) {
+      if (p % 25000 === 0 && (p / 25000) <= 1000000) {
+        p = p / 25000;
+      } else if (p % 1000 === 0 && (p / 1000) <= 1000000) {
+        p = p / 1000;
+      } else {
+        while (p > 1000000) {
+          p = Math.round(p / 1000);
+        }
+      }
+    }
+    return { name: item.name, price: p };
+  });
+}
+
 export default function AssignBill({
   friends,
   onAddFriend,
@@ -323,12 +352,13 @@ export default function AssignBill({
               }
 
               if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-                parsedItems = itemsJson.map((it: any) => {
+                const rawParsed = itemsJson.map((it: any) => {
                   const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
                   const rawPrice = it.price || it.amount || it.total || 0;
                   const price = parsePriceHelper(rawPrice);
                   return { name, price };
                 });
+                parsedItems = sanitizeParsedItems(rawParsed);
               }
             } catch (jsonErr) {
               console.error("Failed to parse OCR JSON:", jsonErr);
@@ -355,7 +385,7 @@ export default function AssignBill({
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
-              parsedItems = data;
+              parsedItems = sanitizeParsedItems(data);
             }
           }
         } catch (err) {

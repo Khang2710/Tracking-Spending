@@ -177,7 +177,37 @@ public class OcrService {
             e.printStackTrace();
         }
 
-        return items;
+        return sanitizeItems(items);
+    }
+
+    private List<FoodItemDto> sanitizeItems(List<FoodItemDto> rawItems) {
+        if (rawItems == null || rawItems.isEmpty()) return new java.util.ArrayList<>();
+        List<Double> normalPrices = new java.util.ArrayList<>();
+        for (FoodItemDto item : rawItems) {
+            if (item.getPrice() > 0 && item.getPrice() < 5000000) {
+                normalPrices.add(item.getPrice());
+            }
+        }
+        java.util.Collections.sort(normalPrices);
+        double medianPrice = !normalPrices.isEmpty() ? normalPrices.get(normalPrices.size() / 2) : 30000.0;
+
+        List<FoodItemDto> sanitized = new java.util.ArrayList<>();
+        for (FoodItemDto item : rawItems) {
+            double p = item.getPrice();
+            if (p > 5000000 || (normalPrices.size() >= 3 && p > medianPrice * 20)) {
+                if (p % 25000 == 0 && (p / 25000) <= 1000000) {
+                    p = p / 25000;
+                } else if (p % 1000 == 0 && (p / 1000) <= 1000000) {
+                    p = p / 1000;
+                } else {
+                    while (p > 1000000) {
+                        p = Math.round(p / 1000.0);
+                    }
+                }
+            }
+            sanitized.add(new FoodItemDto(item.getName(), p));
+        }
+        return sanitized;
     }
 
     private double parsePrice(Object priceObj) {

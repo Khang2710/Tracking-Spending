@@ -44,6 +44,35 @@ function parsePriceHelper(rawPrice: any): number {
   return parseFloat(cleanVnd) || 0;
 }
 
+function sanitizeParsedItems(items: { name: string; price: number }[]): { name: string; price: number }[] {
+  if (!items || items.length === 0) return [];
+
+  const valid = items.map((it) => ({
+    name: String(it.name || "Món ăn").trim(),
+    price: (typeof it.price === "number" && !isNaN(it.price) && isFinite(it.price)) ? Math.abs(it.price) : 0,
+  }));
+
+  const normalPrices = valid.map((i) => i.price).filter((p) => p > 0 && p < 5000000).sort((a, b) => a - b);
+  const medianPrice = normalPrices.length > 0 ? normalPrices[Math.floor(normalPrices.length / 2)] : 30000;
+
+  return valid.map((item) => {
+    let p = item.price;
+    // Anomaly detection: if item price is more than 20x median price or > 5,000,000 VND
+    if (p > 5000000 || (normalPrices.length >= 3 && p > medianPrice * 20)) {
+      if (p % 25000 === 0 && (p / 25000) <= 1000000) {
+        p = p / 25000;
+      } else if (p % 1000 === 0 && (p / 1000) <= 1000000) {
+        p = p / 1000;
+      } else {
+        while (p > 1000000) {
+          p = Math.round(p / 1000);
+        }
+      }
+    }
+    return { name: item.name, price: p };
+  });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers for safe response handling
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -89,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let parsedItems: { name: string; price: number }[] = [];
 
-    const promptText = "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"9.000\" hoặc \"56.000\").\n4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": \"56.000\"\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": \"9.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.";
+    const promptText = "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Hãy trích xuất toàn bộ tên món ăn và THÀNH TIỀN của từng món.\n\nMỗi dòng hoá đơn thường có dạng: [STT] [Tên món] [Số lượng] [Đơn giá] [Thành tiền]\nVí dụ: \"2 Bánh tráng 3 3,000 9,000\" -> Tên món: \"Bánh tráng\", Thành tiền: \"9.000\" (tổng tiền 3 cái).\n\nCÁC QUY TẮC BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"STT\", \"Số lượng\" hay \"Đơn giá\".\n3. TUYỆT ĐỐI KHÔNG tự nhân/chia số từ các dòng khác trên hoá đơn.\n4. Giá trị của \"price\" phải là chuỗi số có dấu phân cách hàng nghìn (ví dụ: \"9.000\" hoặc \"56.000\"). KHÔNG chèn thêm chữ hay phép tính.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về mảng JSON sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": \"56.000\"\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": \"9.000\"\n  }\n]\nBỏ qua thuế và tip.";
 
     // 1. Try Groq API first if Groq key exists
     if (groqKey && groqKey.startsWith("gsk_")) {
@@ -137,13 +166,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-            parsedItems = itemsJson.map((it: any) => {
+            const rawParsed = itemsJson.map((it: any) => {
               const name = String(it.name || it.item || it.description || "Món ăn").trim();
               const rawPrice = it.price || it.amount || it.total || 0;
               const price = parsePriceHelper(rawPrice);
               return { name, price };
             });
 
+            parsedItems = sanitizeParsedItems(rawParsed);
             return res.status(200).json(parsedItems);
           }
         }
@@ -196,13 +226,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-        parsedItems = itemsJson.map((it: any) => {
+        const rawParsed = itemsJson.map((it: any) => {
           const name = String(it.name || it.item || it.description || "Món ăn").trim();
           const rawPrice = it.price || it.amount || it.total || 0;
           const price = parsePriceHelper(rawPrice);
           return { name, price };
         });
 
+        parsedItems = sanitizeParsedItems(rawParsed);
         return res.status(200).json(parsedItems);
       }
     }
