@@ -130,14 +130,14 @@ export default function AssignBill({
     };
   }, [isExtracting]);
 
-  // Prompt 37: 1. Compress image via canvas before sending (1000px width & 0.75 quality for crisp mobile OCR)
+  // Prompt 37: 1. Compress image via canvas before sending (600px width for max speed)
   const handleFileCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsExtracting(true);
     try {
-      const compressedBase64 = await compressImage(file, 1000, 0.75);
+      const compressedBase64 = await compressImage(file, 600, 0.55);
       await processReceiptImage(compressedBase64);
     } catch (err) {
       console.error("Image compression error:", err);
@@ -342,11 +342,17 @@ export default function AssignBill({
           consumers: [],
         }));
         setItems((prev) => [...prev, ...newSplitItems]);
+        
+        // Requirement 1: Alert Debug for mobile users showing extracted items
+        alert(`✅ OCR thành công! Trích xuất được ${parsedItems.length} món:\n` + JSON.stringify(parsedItems, null, 2));
       } else {
-        alert("Không thể bóc tách món ăn từ ảnh hóa đơn này. Vui lòng thử chụp lại rõ nét hơn hoặc kiểm tra API Key.");
+        // Alert when AI returns 0 items / empty array
+        alert("⚠️ Dữ liệu AI trả về mảng rỗng (0 món). Vui lòng chụp lại ảnh hóa đơn rõ nét hơn.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("OpenAI Camera OCR processing error:", e);
+      // Requirement 1: Catch block alert for mobile silent error debugging
+      alert("Lỗi OCR: " + (e?.message || String(e)));
     } finally {
       setIsExtracting(false);
       setOcrLoadingText("");
