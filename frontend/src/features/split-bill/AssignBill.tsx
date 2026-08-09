@@ -14,6 +14,8 @@ interface SplitItem {
 import { FriendBalanceItem, SavedBill } from "./SplitScreen";
 import { Transaction } from "../../App";
 import { compressImage } from "../../utils/imageCompressor";
+import { useCurrency } from "../../context/CurrencyContext";
+
 function parsePriceHelper(rawPrice: any): number {
   if (typeof rawPrice === "number" && !isNaN(rawPrice) && isFinite(rawPrice)) {
     return Math.abs(rawPrice);
