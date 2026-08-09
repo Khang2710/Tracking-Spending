@@ -64,7 +64,10 @@ public class OcrService {
         String apiUrl = "https://api.openai.com/v1/chat/completions";
         String modelName = "gpt-4o";
 
-        if (key.startsWith("gsk_")) {
+        if (key.startsWith("sk-or-v1-")) {
+            apiUrl = "https://openrouter.ai/api/v1/chat/completions";
+            modelName = "google/gemini-flash-1.5";
+        } else if (key.startsWith("gsk_")) {
             apiUrl = "https://api.groq.com/openai/v1/chat/completions";
             modelName = "llama-3.2-11b-vision-preview";
         }

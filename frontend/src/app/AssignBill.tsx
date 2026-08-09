@@ -154,10 +154,19 @@ export default function AssignBill({
 
       const key = openAiApiKey.trim();
       const isGroq = key.startsWith("gsk_");
-      const apiUrl = isGroq
+      const isOpenRouter = key.startsWith("sk-or-v1-");
+
+      const apiUrl = isOpenRouter
+        ? "https://openrouter.ai/api/v1/chat/completions"
+        : isGroq
         ? "https://api.groq.com/openai/v1/chat/completions"
         : "https://api.openai.com/v1/chat/completions";
-      const modelName = isGroq ? "llama-3.2-11b-vision-preview" : "gpt-4o";
+
+      const modelName = isOpenRouter
+        ? "google/gemini-flash-1.5"
+        : isGroq
+        ? "llama-3.2-11b-vision-preview"
+        : "gpt-4o";
 
       setOcrLoadingText(isGroq ? "Đang trích xuất hoá đơn..." : "Đang trích xuất hoá đơn...");
 
