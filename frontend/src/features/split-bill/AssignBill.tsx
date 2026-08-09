@@ -14,7 +14,34 @@ interface SplitItem {
 import { FriendBalanceItem, SavedBill } from "./SplitScreen";
 import { Transaction } from "../../App";
 import { compressImage } from "../../utils/imageCompressor";
-import { useCurrency } from "../../context/CurrencyContext";
+function parsePriceHelper(rawPrice: any): number {
+  if (typeof rawPrice === "number") {
+    return Math.abs(rawPrice);
+  }
+  if (!rawPrice) return 0;
+
+  const strP = String(rawPrice).trim();
+
+  // 1. If string is a pure integer string like "9000" or "326000"
+  if (/^\d+$/.test(strP)) {
+    return parseFloat(strP) || 0;
+  }
+
+  // 2. Extract first valid number token (e.g. "9.000", "9,000", "326.000", "15.00")
+  const numMatch = strP.match(/\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/);
+  if (!numMatch) return 0;
+
+  const numStr = numMatch[0];
+
+  // If decimal cents like "15.00" or "15,00"
+  if (/^\d+[.,]\d{2}$/.test(numStr)) {
+    return parseFloat(numStr.replace(",", ".")) || 0;
+  }
+
+  // Otherwise Vietnamese VND format: "9.000" -> 9000
+  const cleanVnd = numStr.replace(/[.,]/g, "");
+  return parseFloat(cleanVnd) || 0;
+}
 
 export default function AssignBill({
   friends,
@@ -246,7 +273,7 @@ export default function AssignBill({
                   {
                     role: "system",
                     content:
-                      "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
+                      "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"9.000\" hoặc \"56.000\").\n4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": \"56.000\"\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": \"9.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
                   },
                   {
                     role: "user",
@@ -289,17 +316,7 @@ export default function AssignBill({
                 parsedItems = itemsJson.map((it: any) => {
                   const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
                   const rawPrice = it.price || it.amount || it.total || 0;
-                  let price = 0;
-                  if (typeof rawPrice === "number") {
-                    price = rawPrice;
-                  } else {
-                    const strP = String(rawPrice).trim();
-                    if (/^.*\.\d{2}$/.test(strP)) {
-                      price = parseFloat(strP.replace(/[^0-9.]/g, "")) || 0;
-                    } else {
-                      price = parseFloat(strP.replace(/[^0-9]/g, "")) || 0;
-                    }
-                  }
+                  const price = parsePriceHelper(rawPrice);
                   return { name, price };
                 });
               }
