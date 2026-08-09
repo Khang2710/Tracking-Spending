@@ -2182,7 +2182,8 @@ function useAutoCategory(title: string, hasManuallySelected: boolean) {
     // 2. Debounced API fetch with fail-safe fallback
     const delayDebounce = setTimeout(async () => {
       try {
-        const url = `http://localhost:8080/api/transactions/guess-category?title=${encodeURIComponent(title.trim())}`;
+        const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+        const url = `${backendHost}/api/transactions/guess-category?title=${encodeURIComponent(title.trim())}`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -2812,7 +2813,8 @@ export default function App() {
   useEffect(() => {
     if (wallets.length > 0 && transactions.length > 0) {
       const activeWallet = wallets[0];
-      const unappliedTxs = transactions.filter((t) => !appliedTxIds.includes(t.id));
+      const appliedSet = new Set(appliedTxIds);
+      const unappliedTxs = transactions.filter((t) => !appliedSet.has(t.id));
 
       if (unappliedTxs.length > 0) {
         let adjustment = 0;
