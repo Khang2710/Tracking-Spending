@@ -42,21 +42,12 @@
     </dependencies>
 
     <build>
-        <sourceDirectory>java</sourceDirectory>
-        <resources>
-            <resource>
-                <directory>java</directory>
-                <includes>
-                    <include>**/*.properties</include>
-                </includes>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>ai.Application</mainClass>
+                    <mainClass>com.spending.tracker.Application</mainClass>
                 </configuration>
             </plugin>
         </plugins>

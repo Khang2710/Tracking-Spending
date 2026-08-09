@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./app/App.tsx";
+import App from "./App.tsx";
 import "./styles/index.css";
 import "./i18n"; // Import i18n ở đây là chuẩn xác
 
@@ -70,7 +70,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-import { CurrencyProvider } from "./app/context/CurrencyContext";
+import { CurrencyProvider } from "./context/CurrencyContext";
 
 const rootElement = document.getElementById("root");
 if (rootElement) {

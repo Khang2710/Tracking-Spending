@@ -1,0 +1,11 @@
+package com.spending.tracker.repository;
+
+import com.spending.tracker.entity.CategoryDictionary;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface CategoryDictionaryRepository extends JpaRepository<CategoryDictionary, Long> {
+    Optional<CategoryDictionary> findByKeyword(String keyword);
+}
