@@ -30,7 +30,7 @@ export default function AssignBill({
   const { formatCurrency, currency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-  const [taxPercent, setTaxPercent] = useState<number>(10);
+  const [taxPercent, setTaxPercent] = useState<number>(0);
   const [tip, setTip] = useState<number>(0);
 
   const [newFriendName, setNewFriendName] = useState("");
