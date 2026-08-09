@@ -163,7 +163,7 @@ export default function AssignBill({
         : "https://api.openai.com/v1/chat/completions";
 
       const modelName = isOpenRouter
-        ? "google/gemini-flash-1.5"
+        ? "google/gemini-2.5-flash"
         : isGroq
         ? "llama-3.2-11b-vision-preview"
         : "gpt-4o";
@@ -198,6 +198,7 @@ export default function AssignBill({
           },
           body: JSON.stringify({
             model: modelName,
+            max_tokens: 2000,
             messages: [
               {
                 role: "system",

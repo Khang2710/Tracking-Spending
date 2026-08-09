@@ -66,7 +66,7 @@ public class OcrService {
 
         if (key.startsWith("sk-or-v1-")) {
             apiUrl = "https://openrouter.ai/api/v1/chat/completions";
-            modelName = "google/gemini-flash-1.5";
+            modelName = "google/gemini-2.5-flash";
         } else if (key.startsWith("gsk_")) {
             apiUrl = "https://api.groq.com/openai/v1/chat/completions";
             modelName = "llama-3.2-11b-vision-preview";
@@ -104,6 +104,7 @@ public class OcrService {
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);
+            requestBody.put("max_tokens", 2000);
             requestBody.put("messages", Arrays.asList(systemMessage, userMessage));
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
