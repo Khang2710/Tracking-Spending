@@ -95,8 +95,8 @@ class Debt {
 }
 
 @Entity
-@Table(name = "transactions")
-class Transaction {
+@Table(name = "debt_transactions")
+class DebtTransaction {
     public enum TransactionType {
         BILL_SPLIT,
         SETTLEMENT
@@ -122,9 +122,9 @@ class Transaction {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    public Transaction() {}
+    public DebtTransaction() {}
 
-    public Transaction(Long senderId, Long receiverId, BigDecimal amount, TransactionType type) {
+    public DebtTransaction(Long senderId, Long receiverId, BigDecimal amount, TransactionType type) {
         this.senderId = senderId;
         this.receiverId = receiverId;
         this.amount = amount;
@@ -153,7 +153,7 @@ interface FriendBalanceRepository extends JpaRepository<FriendBalance, Long> {
 }
 
 @Repository
-interface TransactionRepository extends JpaRepository<Transaction, Long> {}
+interface DebtTransactionRepository extends JpaRepository<DebtTransaction, Long> {}
 
 // =============================================================================
 // 3. SERVICE LOGIC
@@ -163,11 +163,11 @@ interface TransactionRepository extends JpaRepository<Transaction, Long> {}
 class DebtService {
 
     private final FriendBalanceRepository friendBalanceRepository;
-    private final TransactionRepository transactionRepository;
+    private final DebtTransactionRepository debtTransactionRepository;
 
-    public DebtService(FriendBalanceRepository friendBalanceRepository, TransactionRepository transactionRepository) {
+    public DebtService(FriendBalanceRepository friendBalanceRepository, DebtTransactionRepository debtTransactionRepository) {
         this.friendBalanceRepository = friendBalanceRepository;
-        this.transactionRepository = transactionRepository;
+        this.debtTransactionRepository = debtTransactionRepository;
     }
 
     /**
@@ -213,8 +213,8 @@ class DebtService {
             friendBalanceRepository.save(friendBalance);
 
             // Save individual split record as a bill split transaction
-            Transaction tx = new Transaction(debtorId, payerId, amount, Transaction.TransactionType.BILL_SPLIT);
-            transactionRepository.save(tx);
+            DebtTransaction tx = new DebtTransaction(debtorId, payerId, amount, DebtTransaction.TransactionType.BILL_SPLIT);
+            debtTransactionRepository.save(tx);
         }
     }
 
@@ -259,8 +259,8 @@ class DebtService {
         }
 
         // 1. Create and save Settlement transaction record
-        Transaction settlementTx = new Transaction(senderId, receiverId, settlementAmount, Transaction.TransactionType.SETTLEMENT);
-        transactionRepository.save(settlementTx);
+        DebtTransaction settlementTx = new DebtTransaction(senderId, receiverId, settlementAmount, DebtTransaction.TransactionType.SETTLEMENT);
+        debtTransactionRepository.save(settlementTx);
 
         // 2. Reset net balance to exactly zero
         friendBalance.setNetBalance(BigDecimal.ZERO);
