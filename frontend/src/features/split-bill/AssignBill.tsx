@@ -38,8 +38,8 @@ export default function AssignBill({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [ocrLoadingText, setOcrLoadingText] = useState("");
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(() => (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
-  const [hasApiKey, setHasApiKey] = useState(() => !!((import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key")));
+  const [apiKeyInput, setApiKeyInput] = useState(() => (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
+  const [hasApiKey, setHasApiKey] = useState(() => !!((import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key")));
   const [isExtracting, setIsExtracting] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [newItemName, setNewItemName] = useState("");
@@ -179,8 +179,9 @@ export default function AssignBill({
 
       let parsedItems: { name: string; price: number }[] = [];
       const openAiApiKey =
-        (import.meta.env.VITE_OPENAI_KEY as string) ||
         (import.meta.env.VITE_GROQ_KEY as string) ||
+        (import.meta.env.VITE_OPENAI_KEY as string) ||
+        localStorage.getItem("groq_api_key") ||
         localStorage.getItem("openai_api_key") ||
         localStorage.getItem("gemini_api_key") ||
         atob("c2stb3ItdjEtNzM0NjY1OWMwMmM1ZDY3Y2M1ZDJkNGNhYmEyNDViNTQxZmU0NDNmMzM1NTJlNjA2NjYwOGZiNGE4ZjY3N2U1NA==");
