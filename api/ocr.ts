@@ -52,20 +52,22 @@ function sanitizeParsedItems(items: { name: string; price: number }[]): { name: 
     price: (typeof it.price === "number" && !isNaN(it.price) && isFinite(it.price)) ? Math.abs(it.price) : 0,
   }));
 
-  const normalPrices = valid.map((i) => i.price).filter((p) => p > 0 && p < 5000000).sort((a, b) => a - b);
+  const normalPrices = valid.map((i) => i.price).filter((p) => p > 0 && p < 1000000).sort((a, b) => a - b);
   const medianPrice = normalPrices.length > 0 ? normalPrices[Math.floor(normalPrices.length / 2)] : 30000;
 
   return valid.map((item) => {
     let p = item.price;
-    // Anomaly detection: if item price is more than 20x median price or > 5,000,000 VND
-    if (p > 5000000 || (normalPrices.length >= 3 && p > medianPrice * 20)) {
-      if (p % 25000 === 0 && (p / 25000) <= 1000000) {
+    // Anomaly detection: if item price is more than 5x median price and > 100,000 VND
+    if (p > 5000000 || (normalPrices.length >= 3 && p > medianPrice * 5 && p > 100000)) {
+      if (p % 25000 === 0 && (p / 25000) <= 1000000 && (p / 25000) >= 1000) {
         p = p / 25000;
-      } else if (p % 1000 === 0 && (p / 1000) <= 1000000) {
+      } else if (p % 25 === 0 && (p / 25) <= 1000000 && (p / 25) >= 1000) {
+        p = p / 25;
+      } else if (p % 1000 === 0 && (p / 1000) <= 1000000 && (p / 1000) >= 1000) {
         p = p / 1000;
       } else {
-        while (p > 1000000) {
-          p = Math.round(p / 1000);
+        while (p > medianPrice * 10 && p > 100000) {
+          p = Math.round(p / 10);
         }
       }
     }
