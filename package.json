@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
+    "@vercel/node": "^5.9.7",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"
   }

@@ -202,8 +202,34 @@ export default function AssignBill({
         ? "llama-3.2-11b-vision-preview"
         : "gpt-4o";
 
-      // Option 1: Direct Client-side REST API First (OpenRouter / Groq / OpenAI Vision) - 10s Timeout
-      if (key) {
+      // 1. Same-Origin Vercel Serverless Proxy FIRST (Bypasses CORS completely on iOS Safari / Chrome Android)
+      try {
+        const res = await fetchWithTimeout(
+          "/api/ocr",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              imageBase64: pureBase64,
+              mimeType,
+              apiKey: openAiApiKey.trim(),
+            }),
+          },
+          12000
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            parsedItems = data;
+          }
+        }
+      } catch (proxyErr) {
+        console.warn("Vercel Serverless /api/ocr proxy failed, attempting client fallback...", proxyErr);
+      }
+
+      // 2. Client-side direct REST API fallback if serverless proxy returned no items
+      if (parsedItems.length === 0 && key) {
         try {
           const response = await fetchWithTimeout(
             apiUrl,
