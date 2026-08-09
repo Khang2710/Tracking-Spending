@@ -255,7 +255,7 @@ export default function AssignBill({
       // 2. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
       if (parsedItems.length === 0) {
         try {
-          const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+          const backendHost = import.meta.env.VITE_BACKEND_URL || "https://tracking-spending-backend.onrender.com";
           const res = await fetch(`${backendHost}/api/ocr/scan`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

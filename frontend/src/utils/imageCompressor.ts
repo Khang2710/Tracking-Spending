@@ -1,17 +1,31 @@
 /**
- * Utility function to compress an image file using HTML5 Canvas before sending to AI Backend.
- * Reduces raw 5MB-10MB mobile photo down to ~100KB-200KB for maximum speed.
+ * Modern HTML5 Canvas Image Compression Utility optimized for Mobile Web (iOS Safari & Android Chrome).
+ * Uses URL.createObjectURL for instant memory-efficient camera photo loading and high-speed compression.
  */
 export const compressImage = (
   file: File | Blob,
-  maxWidth = 800,
-  quality = 0.6
+  maxWidth = 600,
+  quality = 0.55
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
+    let objectUrl: string | null = null;
+    try {
+      objectUrl = URL.createObjectURL(file);
+    } catch (e) {
+      // Fallback if createObjectURL is not supported
+      objectUrl = null;
+    }
+
+    const img = new Image();
+
+    const cleanup = () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+
+    img.onload = () => {
+      try {
         const canvas = document.createElement("canvas");
         let width = img.width;
         let height = img.height;
@@ -27,20 +41,38 @@ export const compressImage = (
 
         const ctx = canvas.getContext("2d");
         if (!ctx) {
+          cleanup();
           return reject(new Error("Canvas 2D context unavailable"));
         }
 
         // Draw image onto canvas
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Export canvas as compressed image/jpeg with quality 0.6
+        // Export canvas as compressed image/jpeg
         const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+        cleanup();
         resolve(compressedBase64);
-      };
-      img.onerror = (err) => reject(err);
-      img.src = event.target?.result as string;
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
     };
-    reader.onerror = (err) => reject(err);
-    reader.readAsDataURL(file);
+
+    img.onerror = (err) => {
+      cleanup();
+      reject(err);
+    };
+
+    if (objectUrl) {
+      img.src = objectUrl;
+    } else {
+      // Fallback via FileReader if createObjectURL is unavailable
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    }
   });
 };
