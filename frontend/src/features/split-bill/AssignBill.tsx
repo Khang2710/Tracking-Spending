@@ -124,19 +124,48 @@ export default function AssignBill({
     if (!file) return;
 
     setIsExtracting(true);
+    setOcrLoadingText("Đang nén & đọc hoá đơn...");
+
     try {
-      const compressedBase64 = await compressImage(file, 600, 0.55);
-      await processReceiptImage(compressedBase64);
+      let base64Data = "";
+      try {
+        base64Data = await compressImage(file, 600, 0.55);
+      } catch (compressErr) {
+        console.warn("Compress failed, fallback to FileReader:", compressErr);
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(event.target?.result as string);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (base64Data) {
+        await processReceiptImage(base64Data);
+      }
     } catch (err) {
-      console.error("Image compression error:", err);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64Data = event.target?.result as string;
-        if (base64Data) await processReceiptImage(base64Data);
-      };
-      reader.readAsDataURL(file);
+      console.error("Image processing error:", err);
     } finally {
+      setIsExtracting(false);
+      setOcrLoadingText("");
+      setOcrProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 10000): Promise<Response> => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(id);
+      return response;
+    } catch (error) {
+      clearTimeout(id);
+      throw error;
     }
   };
 
@@ -172,38 +201,42 @@ export default function AssignBill({
         ? "llama-3.2-11b-vision-preview"
         : "gpt-4o";
 
-      // Option 1: Direct Client-side REST API First (OpenRouter / Groq / OpenAI Vision) - Skips Cold-Start Backend Lag!
+      // Option 1: Direct Client-side REST API First (OpenRouter / Groq / OpenAI Vision) - 10s Timeout
       if (key) {
         try {
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${key}`,
-            },
-            body: JSON.stringify({
-              model: modelName,
-              max_tokens: 2000,
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
-                },
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "image_url",
-                      image_url: {
-                        url: formattedBase64,
+          const response = await fetchWithTimeout(
+            apiUrl,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${key}`,
+              },
+              body: JSON.stringify({
+                model: modelName,
+                max_tokens: 2000,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "image_url",
+                        image_url: {
+                          url: formattedBase64,
+                        },
                       },
-                    },
-                  ],
-                },
-              ],
-            }),
-          });
+                    ],
+                  },
+                ],
+              }),
+            },
+            10000
+          );
 
           if (response.ok) {
             const result = await response.json();
@@ -248,7 +281,7 @@ export default function AssignBill({
             }
           }
         } catch (clientErr) {
-          console.warn("Client-side direct OCR failed, falling back to backend...", clientErr);
+          console.warn("Client-side direct OCR failed or timed out:", clientErr);
         }
       }
 
@@ -256,11 +289,15 @@ export default function AssignBill({
       if (parsedItems.length === 0) {
         try {
           const backendHost = import.meta.env.VITE_BACKEND_URL || "https://tracking-spending-backend.onrender.com";
-          const res = await fetch(`${backendHost}/api/ocr/scan`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
-          });
+          const res = await fetchWithTimeout(
+            `${backendHost}/api/ocr/scan`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
+            },
+            10000
+          );
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
@@ -268,55 +305,7 @@ export default function AssignBill({
             }
           }
         } catch (err) {
-          console.error("Backend OCR error:", err);
-        }
-      }
-
-      // 3. Fallback: Try Gemini 1.5 Flash Vision if Gemini Key exists
-      const geminiKey =
-        (import.meta.env.VITE_GEMINI_KEY as string) ||
-        localStorage.getItem("gemini_api_key") ||
-        "";
-
-      if (parsedItems.length === 0 && geminiKey) {
-        setOcrLoadingText("Đang quét hoá đơn");
-        try {
-          const promptText = `Bạn là một máy đọc hoá đơn nhà hàng (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng. Tuyệt đối KHÔNG trả về markdown, giải thích hay text nào khác. CHỈ trả về một mảng JSON theo format: [ { "name": "Tên món 1", "price": 15.5 }, { "name": "Tên món 2", "price": 5.0 } ]. Bỏ qua thuế và tip.`;
-
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      { text: promptText },
-                      {
-                        inlineData: {
-                          mimeType: mimeType,
-                          data: pureBase64,
-                        },
-                      },
-                    ],
-                  },
-                ],
-              }),
-            }
-          );
-
-          if (response.ok) {
-            const result = await response.json();
-            const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-            const itemsJson = JSON.parse(cleanJson);
-            if (Array.isArray(itemsJson)) {
-              parsedItems = itemsJson;
-            }
-          }
-        } catch (gemErr) {
-          console.error("Gemini API error:", gemErr);
+          console.error("Backend OCR error/timeout:", err);
         }
       }
 
@@ -332,10 +321,11 @@ export default function AssignBill({
         setItems((prev) => [...prev, ...newSplitItems]);
       }
     } catch (e) {
-      console.error("OpenAI Camera OCR processing error:", e);
+      console.error("OCR processing exception:", e);
     } finally {
       setIsExtracting(false);
       setOcrLoadingText("");
+      setOcrProgress(0);
     }
   };
 
@@ -1011,6 +1001,17 @@ export default function AssignBill({
                 <p className="text-base font-bold text-white font-sans">{ocrLoadingText || t("split.aiReadingReceipt")}</p>
                 <span className="text-xs text-tm font-sans mt-1 block">{t("split.aiReadingHint")}</span>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExtracting(false);
+                  setOcrLoadingText("");
+                  setOcrProgress(0);
+                }}
+                className="mt-2 px-4 py-1.5 rounded-xl text-xs font-bold border border-white/10 text-tm hover:text-white transition-all cursor-pointer"
+              >
+                Hủy / Cancel
+              </button>
             </motion.div>
           </div>
         )}
