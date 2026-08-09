@@ -1,6 +1,5 @@
 -- =============================================================================
--- SUPABASE / POSTGRESQL PRODUCTION DDL & SECURITY SCHEMA
--- Generated based on Supabase Postgres Best Practices Audit
+-- SUPABASE / POSTGRESQL FAIL-SAFE PRODUCTION DDL & SECURITY SCHEMA
 -- =============================================================================
 
 -- 1. USERS TABLE
@@ -11,6 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     currency_preference VARCHAR(10) NOT NULL DEFAULT 'VND',
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- 2. WALLETS TABLE
 CREATE TABLE IF NOT EXISTS wallets (
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS wallets (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON wallets(user_id);
 
 -- 3. TRANSACTIONS TABLE
 CREATE TABLE IF NOT EXISTS transactions (
@@ -30,6 +33,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     wallet_id BIGINT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE
 );
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_transactions_wallet_id ON transactions(wallet_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_wallet_date ON transactions(wallet_id, date DESC);
 
 -- 4. SPLIT BILLS TABLE
 CREATE TABLE IF NOT EXISTS split_bills (
@@ -38,6 +44,7 @@ CREATE TABLE IF NOT EXISTS split_bills (
     total_amount NUMERIC(14, 2) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+ALTER TABLE split_bills ENABLE ROW LEVEL SECURITY;
 
 -- 5. BILL PARTICIPANTS TABLE
 CREATE TABLE IF NOT EXISTS bill_participants (
@@ -46,28 +53,5 @@ CREATE TABLE IF NOT EXISTS bill_participants (
     amount_owed NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
     split_bill_id BIGINT NOT NULL REFERENCES split_bills(id) ON DELETE CASCADE
 );
-
--- =============================================================================
--- CRITICAL INDEXES FOR QUERY PERFORMANCE & FOREIGN KEYS (query-missing-indexes)
--- =============================================================================
-
--- Foreign Key Indexes for fast join & cascade delete performance
-CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON wallets(user_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_wallet_id ON transactions(wallet_id);
-CREATE INDEX IF NOT EXISTS idx_bill_participants_split_bill_id ON bill_participants(split_bill_id);
-
--- Composite Index for fast date range filtering & sorting (TransactionRepository queries)
-CREATE INDEX IF NOT EXISTS idx_transactions_wallet_date ON transactions(wallet_id, date DESC);
-
--- Unique index for user email lookup
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-
--- =============================================================================
--- ROW LEVEL SECURITY (RLS) & POLICIES (security-rls)
--- =============================================================================
-
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE split_bills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bill_participants ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_bill_participants_split_bill_id ON bill_participants(split_bill_id);
