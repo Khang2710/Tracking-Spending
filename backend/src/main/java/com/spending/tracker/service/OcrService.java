@@ -182,17 +182,37 @@ public class OcrService {
 
     private double parsePrice(Object priceObj) {
         if (priceObj == null) return 0.0;
-        if (priceObj instanceof Number) return ((Number) priceObj).doubleValue();
+        if (priceObj instanceof Number) {
+            double val = ((Number) priceObj).doubleValue();
+            return Double.isNaN(val) || Double.isInfinite(val) ? 0.0 : Math.abs(val);
+        }
         String str = priceObj.toString().trim();
         if (str.isEmpty()) return 0.0;
 
-        if (str.matches("^.*\\.\\d{2}$")) {
-            String clean = str.replaceAll("[^0-9.]", "");
+        if (str.matches("^\\d+$")) {
+            try { return Double.parseDouble(str); } catch (Exception ignored) {}
+        }
+
+        // 1. Look for formatted thousand numbers (e.g. 9.000, 56.000, 3.565.000)
+        java.util.regex.Matcher thousandMatcher = java.util.regex.Pattern.compile("\\b\\d{1,3}(?:[.,]\\d{3})+\\b").matcher(str);
+        if (thousandMatcher.find()) {
+            String clean = thousandMatcher.group().replaceAll("[.,]", "");
             try { return Double.parseDouble(clean); } catch (Exception ignored) {}
         }
-        String digits = str.replaceAll("[^0-9]", "");
-        if (!digits.isEmpty()) {
-            try { return Double.parseDouble(digits); } catch (Exception ignored) {}
+
+        // 2. Extract first number sequence
+        java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d+(?:[.,]\\d+)*").matcher(str);
+        if (numMatcher.find()) {
+            String numStr = numMatcher.group();
+            if (numStr.matches(".*\\.\\d{1,2}$")) {
+                numStr = numStr.replaceAll(",", "");
+                try { return Double.parseDouble(numStr); } catch (Exception ignored) {}
+            } else if (numStr.matches(".*,\\d{1,2}$")) {
+                numStr = numStr.replaceAll("\\.", "").replace(",", ".");
+                try { return Double.parseDouble(numStr); } catch (Exception ignored) {}
+            }
+            String clean = numStr.replaceAll("[.,]", "");
+            try { return Double.parseDouble(clean); } catch (Exception ignored) {}
         }
         return 0.0;
     }

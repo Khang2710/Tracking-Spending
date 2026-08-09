@@ -8,30 +8,38 @@ function getCleanKey(key?: string): string {
 }
 
 function parsePriceHelper(rawPrice: any): number {
-  if (typeof rawPrice === "number") {
+  if (typeof rawPrice === "number" && !isNaN(rawPrice) && isFinite(rawPrice)) {
     return Math.abs(rawPrice);
   }
   if (!rawPrice) return 0;
 
   const strP = String(rawPrice).trim();
-
-  // 1. If string is a pure integer string like "9000" or "326000"
   if (/^\d+$/.test(strP)) {
     return parseFloat(strP) || 0;
   }
 
-  // 2. Extract first valid number token (e.g. "9.000", "9,000", "326.000", "15.00")
-  const numMatch = strP.match(/\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/);
-  if (!numMatch) return 0;
-
-  const numStr = numMatch[0];
-
-  // If decimal cents like "15.00" or "15,00"
-  if (/^\d+[.,]\d{2}$/.test(numStr)) {
-    return parseFloat(numStr.replace(",", ".")) || 0;
+  // 1. Look for formatted thousand numbers (e.g. 9.000, 56.000, 3.565.000)
+  const thousandMatch = strP.match(/\b\d{1,3}(?:[.,]\d{3})+\b/);
+  if (thousandMatch) {
+    const cleanVnd = thousandMatch[0].replace(/[.,]/g, "");
+    return parseFloat(cleanVnd) || 0;
   }
 
-  // Otherwise Vietnamese VND format: "9.000" -> 9000
+  // 2. Extract number sequence
+  const numMatch = strP.match(/\d+(?:[.,]\d+)*/);
+  if (!numMatch) return 0;
+
+  let numStr = numMatch[0];
+
+  // Handle standard decimal formats like 1,234.56 or 15.5
+  if (/\.\d{1,2}$/.test(numStr)) {
+    numStr = numStr.replace(/,/g, "");
+    return parseFloat(numStr) || 0;
+  } else if (/,\d{1,2}$/.test(numStr)) {
+    numStr = numStr.replace(/\./g, "").replace(",", ".");
+    return parseFloat(numStr) || 0;
+  }
+
   const cleanVnd = numStr.replace(/[.,]/g, "");
   return parseFloat(cleanVnd) || 0;
 }
