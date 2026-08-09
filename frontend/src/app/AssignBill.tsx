@@ -53,6 +53,7 @@ export default function AssignBill({
   const [apiKeyInput, setApiKeyInput] = useState(() => (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
   const [hasApiKey, setHasApiKey] = useState(() => !!((import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key")));
   const [isExtracting, setIsExtracting] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [billTitle, setBillTitle] = useState("");
@@ -93,35 +94,50 @@ export default function AssignBill({
       }
       setIsExtracting(false);
       setOcrLoadingText("");
+      setOcrProgress(0);
     }, 1200);
   };
 
-  // Prompt 37: 2. Animated Loading Text Rotation
+  // Option 5: Animated Real-time Progress Bar & Status Tracker
   useEffect(() => {
-    if (!isExtracting) return;
-    const loadingMessages = [
-      "Đang tải ảnh lên...",
-      "AI đang đọc hoá đơn...",
-      "Đang bóc tách giá tiền...",
-      "Đang hoàn tất phân tích...",
-    ];
-    let step = 0;
-    setOcrLoadingText(loadingMessages[0]);
-    const interval = setInterval(() => {
-      step = (step + 1) % loadingMessages.length;
-      setOcrLoadingText(loadingMessages[step]);
-    }, 1200);
-    return () => clearInterval(interval);
+    if (!isExtracting) {
+      setOcrProgress(0);
+      setOcrLoadingText("");
+      return;
+    }
+    setOcrProgress(15);
+    setOcrLoadingText("Đang nén & tối ưu hình ảnh...");
+
+    const t1 = setTimeout(() => {
+      setOcrProgress(45);
+      setOcrLoadingText("Đang kết nối AI siêu tốc...");
+    }, 300);
+
+    const t2 = setTimeout(() => {
+      setOcrProgress(80);
+      setOcrLoadingText("AI đang bóc tách món ăn & giá tiền...");
+    }, 800);
+
+    const t3 = setTimeout(() => {
+      setOcrProgress(95);
+      setOcrLoadingText("Đang hoàn tất phân tích hóa đơn...");
+    }, 1500);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, [isExtracting]);
 
-  // Prompt 37: 1. Compress image via canvas before sending
+  // Prompt 37: 1. Compress image via canvas before sending (600px width for max speed)
   const handleFileCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsExtracting(true);
     try {
-      const compressedBase64 = await compressImage(file, 800, 0.6);
+      const compressedBase64 = await compressImage(file, 600, 0.55);
       await processReceiptImage(compressedBase64);
     } catch (err) {
       console.error("Image compression error:", err);
@@ -168,103 +184,103 @@ export default function AssignBill({
         ? "llama-3.2-11b-vision-preview"
         : "gpt-4o";
 
-      setOcrLoadingText(isGroq ? "Đang trích xuất hoá đơn..." : "Đang trích xuất hoá đơn...");
+      // Option 1: Direct Client-side REST API First (OpenRouter / Groq / OpenAI Vision) - Skips Cold-Start Backend Lag!
+      if (key) {
+        try {
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+              model: modelName,
+              max_tokens: 2000,
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
+                },
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: formattedBase64,
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          });
 
-      // 1. Prompt 35: Call Spring Boot Backend (/api/ocr/scan)
-      try {
-        const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
-        const res = await fetch(`${backendHost}/api/ocr/scan`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            parsedItems = data;
+          if (response.ok) {
+            const result = await response.json();
+            const rawContent = result.choices?.[0]?.message?.content || "";
+            const cleanText = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```json/g, "").replace(/```/g, "").trim();
+
+            try {
+              let itemsJson: any[] = [];
+              const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
+              const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+              if (objMatch) {
+                const parsedObj = JSON.parse(objMatch[0]);
+                if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+              } else if (arrayMatch) {
+                itemsJson = JSON.parse(arrayMatch[0]);
+              } else {
+                const directParse = JSON.parse(cleanText);
+                itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+              }
+
+              if (Array.isArray(itemsJson) && itemsJson.length > 0) {
+                parsedItems = itemsJson.map((it: any) => {
+                  const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
+                  const rawPrice = it.price || it.amount || it.total || 0;
+                  let price = 0;
+                  if (typeof rawPrice === "number") {
+                    price = rawPrice;
+                  } else {
+                    const strP = String(rawPrice).trim();
+                    if (/^.*\.\d{2}$/.test(strP)) {
+                      price = parseFloat(strP.replace(/[^0-9.]/g, "")) || 0;
+                    } else {
+                      price = parseFloat(strP.replace(/[^0-9]/g, "")) || 0;
+                    }
+                  }
+                  return { name, price };
+                });
+              }
+            } catch (jsonErr) {
+              console.error("Failed to parse OCR JSON:", jsonErr);
+            }
           }
+        } catch (clientErr) {
+          console.warn("Client-side direct OCR failed, falling back to backend...", clientErr);
         }
-      } catch (err) {
-        // Backend offline or fallback to client-side REST API
       }
 
-      // 2. Prompt 34: Direct Client-side REST API (Groq / OpenAI Vision)
-      if (parsedItems.length === 0 && key) {
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: modelName,
-            max_tokens: 2000,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tên món 1\",\n    \"price\": \"15.000\"\n  },\n  {\n    \"name\": \"Tên món 2\",\n    \"price\": \"3.565.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: formattedBase64,
-                    },
-                  },
-                ],
-              },
-            ],
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          const rawContent = result.choices?.[0]?.message?.content || "";
-          const cleanText = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```json/g, "").replace(/```/g, "").trim();
-          
-          try {
-            let itemsJson: any[] = [];
-            const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
-            const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-
-            if (objMatch) {
-              const parsedObj = JSON.parse(objMatch[0]);
-              if (Array.isArray(parsedObj.items)) {
-                itemsJson = parsedObj.items;
-              }
-            } else if (arrayMatch) {
-              itemsJson = JSON.parse(arrayMatch[0]);
-            } else {
-              const directParse = JSON.parse(cleanText);
-              itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+      // 2. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
+      if (parsedItems.length === 0) {
+        try {
+          const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+          const res = await fetch(`${backendHost}/api/ocr/scan`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              parsedItems = data;
             }
-
-            if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-              parsedItems = itemsJson.map((it: any) => {
-                const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
-                const rawPrice = it.price || it.amount || it.total || 0;
-                let price = 0;
-                if (typeof rawPrice === "number") {
-                  price = rawPrice;
-                } else {
-                  const strP = String(rawPrice).trim();
-                  if (/^.*\.\d{2}$/.test(strP)) {
-                    price = parseFloat(strP.replace(/[^0-9.]/g, "")) || 0;
-                  } else {
-                    price = parseFloat(strP.replace(/[^0-9]/g, "")) || 0;
-                  }
-                }
-                return { name, price };
-              });
-            }
-          } catch (jsonErr) {
-            console.error("Failed to parse OCR JSON:", jsonErr);
           }
-        } else {
-          console.error("AI API Error status:", response.status);
+        } catch (err) {
+          console.error("Backend OCR error:", err);
         }
       }
 
@@ -614,6 +630,29 @@ export default function AssignBill({
                 )}
               </button>
             </div>
+
+            {/* Option 5: Dynamic Real-time Progress Bar & Status Tracker */}
+            {isExtracting && (
+              <div className="mt-4 p-3.5 rounded-xl border flex flex-col gap-2 transition-all" style={{ borderColor: C.gold + "50", background: C.surf + "bb" }}>
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="flex items-center gap-2" style={{ color: C.gold }}>
+                    <Sparkles size={14} className="animate-spin" />
+                    {ocrLoadingText}
+                  </span>
+                  <span style={{ color: C.gold }}>{ocrProgress}%</span>
+                </div>
+                <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: C.bg }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${ocrProgress}%`,
+                      background: `linear-gradient(90deg, ${C.gold} 0%, #F59E0B 100%)`,
+                      boxShadow: `0 0 8px ${C.gold}80`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </Card>
 
           <div className="flex flex-col gap-4">
