@@ -2659,7 +2659,7 @@ function EditBudgetForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white font-sans">
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium uppercase tracking-wider pl-0.5">Monthly Budget ($)</label>
+        <label className="text-xs text-tm font-medium uppercase tracking-wider pl-0.5">{t("dashboard.monthlyBudget")}</label>
         <input
           type="number"
           step="1"
@@ -2754,17 +2754,17 @@ export default function App() {
   const [budget, setBudget] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("wealthy_v2_budget");
-      if (saved) {
+      if (saved !== null) {
         const num = Number(saved);
-        if (!isNaN(num) && num > 0) {
-          if (num === 1000 || num === 820) return 1000000;
+        if (!isNaN(num) && num >= 0) {
+          if (num === 1000000 || num === 1000 || num === 820) return 0;
           return num;
         }
       }
     } catch (e) {
       console.error("Error reading budget from localStorage", e);
     }
-    return 1000000;
+    return 0;
   });
 
   const [searchQuery, setSearchQuery] = useState("");
