@@ -49,9 +49,7 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const absVal = Math.abs(amount);
 
     if (currency === "VND") {
-      // If amount is small (e.g. entered in USD scale < 10,000), scale by exchangeRate (25,000)
-      const isUsdScale = !forceRaw && absVal > 0 && absVal < 10000;
-      const finalAmount = isUsdScale ? Math.round(absVal * exchangeRate) : Math.round(absVal);
+      const finalAmount = Math.round(absVal);
       const formatted = finalAmount.toLocaleString("vi-VN");
       return isNegative ? `-${formatted} ₫` : `${formatted} ₫`;
     } else {

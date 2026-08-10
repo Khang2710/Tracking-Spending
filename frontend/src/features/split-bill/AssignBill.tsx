@@ -53,37 +53,6 @@ function parsePriceHelper(rawPrice: any): number {
   return parseFloat(cleanVnd) || 0;
 }
 
-function sanitizeParsedItems(items: { name: string; price: number }[]): { name: string; price: number }[] {
-  if (!items || items.length === 0) return [];
-
-  const valid = items.map((it) => ({
-    name: String(it.name || "Món ăn").trim(),
-    price: (typeof it.price === "number" && !isNaN(it.price) && isFinite(it.price)) ? Math.abs(it.price) : 0,
-  }));
-
-  const normalPrices = valid.map((i) => i.price).filter((p) => p > 0 && p < 1000000).sort((a, b) => a - b);
-  const medianPrice = normalPrices.length > 0 ? normalPrices[Math.floor(normalPrices.length / 2)] : 30000;
-
-  return valid.map((item) => {
-    let p = item.price;
-    // Anomaly detection: if item price is more than 5x median price and > 100,000 VND
-    if (p > 5000000 || (normalPrices.length >= 3 && p > medianPrice * 5 && p > 100000)) {
-      if (p % 25000 === 0 && (p / 25000) <= 1000000 && (p / 25000) >= 1000) {
-        p = p / 25000;
-      } else if (p % 25 === 0 && (p / 25) <= 1000000 && (p / 25) >= 1000) {
-        p = p / 25;
-      } else if (p % 1000 === 0 && (p / 1000) <= 1000000 && (p / 1000) >= 1000) {
-        p = p / 1000;
-      } else {
-        while (p > medianPrice * 10 && p > 100000) {
-          p = Math.round(p / 10);
-        }
-      }
-    }
-    return { name: item.name, price: p };
-  });
-}
-
 export default function AssignBill({
   friends,
   onAddFriend,
@@ -289,7 +258,7 @@ export default function AssignBill({
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            parsedItems = sanitizeParsedItems(data);
+            parsedItems = data;
           }
         }
       } catch (proxyErr) {
@@ -314,7 +283,7 @@ export default function AssignBill({
                   {
                     role: "system",
                     content:
-                      "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"9.000\" hoặc \"56.000\").\n4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": \"56.000\"\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": \"9.000\"\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
+                      "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì \"9.000\", 56000 thay vì \"56.000\").\n4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": 56000\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": 9000\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.",
                   },
                   {
                     role: "user",
@@ -354,13 +323,12 @@ export default function AssignBill({
               }
 
               if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-                const rawParsed = itemsJson.map((it: any) => {
+                parsedItems = itemsJson.map((it: any) => {
                   const name = String(it.name || it.item || it.description || t("common.unnamed")).trim();
                   const rawPrice = it.price || it.amount || it.total || 0;
                   const price = parsePriceHelper(rawPrice);
                   return { name, price };
                 });
-                parsedItems = sanitizeParsedItems(rawParsed);
               }
             } catch (jsonErr) {
               console.error("Failed to parse OCR JSON:", jsonErr);
@@ -371,7 +339,7 @@ export default function AssignBill({
         }
       }
 
-      // 3. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
+      // 2. Fallback to Spring Boot Backend (/api/ocr/scan) ONLY if client direct call didn't extract items
       if (parsedItems.length === 0) {
         try {
           const backendHost = import.meta.env.VITE_BACKEND_URL || "https://tracking-spending-backend.onrender.com";
@@ -387,7 +355,7 @@ export default function AssignBill({
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
-              parsedItems = sanitizeParsedItems(data);
+              parsedItems = data;
             }
           }
         } catch (err) {
@@ -395,13 +363,10 @@ export default function AssignBill({
         }
       }
 
-      // ALWAYS sanitize final parsed items right before state update
-      const finalItems = sanitizeParsedItems(parsedItems);
-
       // 4. Update food items state with parsed items from receipt
-      if (finalItems.length > 0) {
+      if (parsedItems.length > 0) {
         let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-        const newSplitItems: SplitItem[] = finalItems.map((item) => ({
+        const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
           id: nextId++,
           name: item.name,
           price: typeof item.price === "number" ? item.price : parseFloat(item.price as any) || 0,

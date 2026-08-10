@@ -81,13 +81,14 @@ public class OcrService {
             systemMessage.put("role", "system");
             systemMessage.put("content", "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\n" +
                     "YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n" +
-                    "1. Bắt buộc phải lấy con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n" +
-                    "2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price).\n" +
-                    "3. Giữ nguyên dấu chấm hoặc dấu phẩy phân cách hàng nghìn y như trên hoá đơn (ví dụ: \"3.565.000\"). Giá trị của price bắt buộc phải nằm trong dấu ngoặc kép (kiểu String).\n\n" +
+                    "1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n" +
+                    "2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n" +
+                    "3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì \"9.000\", 56000 thay vì \"56.000\").\n" +
+                    "4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\n" +
                     "Tuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n" +
                     "[\n" +
-                    "  { \"name\": \"Tên món 1\", \"price\": \"15.000\" },\n" +
-                    "  { \"name\": \"Tên món 2\", \"price\": \"3.565.000\" }\n" +
+                    "  { \"name\": \"Tiger nâu\", \"price\": 56000 },\n" +
+                    "  { \"name\": \"Bánh tráng\", \"price\": 9000 }\n" +
                     "]\n" +
                     "Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.");
 
@@ -177,37 +178,7 @@ public class OcrService {
             e.printStackTrace();
         }
 
-        return sanitizeItems(items);
-    }
-
-    private List<FoodItemDto> sanitizeItems(List<FoodItemDto> rawItems) {
-        if (rawItems == null || rawItems.isEmpty()) return new java.util.ArrayList<>();
-        List<Double> normalPrices = new java.util.ArrayList<>();
-        for (FoodItemDto item : rawItems) {
-            if (item.getPrice() > 0 && item.getPrice() < 5000000) {
-                normalPrices.add(item.getPrice());
-            }
-        }
-        java.util.Collections.sort(normalPrices);
-        double medianPrice = !normalPrices.isEmpty() ? normalPrices.get(normalPrices.size() / 2) : 30000.0;
-
-        List<FoodItemDto> sanitized = new java.util.ArrayList<>();
-        for (FoodItemDto item : rawItems) {
-            double p = item.getPrice();
-            if (p > 5000000 || (normalPrices.size() >= 3 && p > medianPrice * 20)) {
-                if (p % 25000 == 0 && (p / 25000) <= 1000000) {
-                    p = p / 25000;
-                } else if (p % 1000 == 0 && (p / 1000) <= 1000000) {
-                    p = p / 1000;
-                } else {
-                    while (p > 1000000) {
-                        p = Math.round(p / 1000.0);
-                    }
-                }
-            }
-            sanitized.add(new FoodItemDto(item.getName(), p));
-        }
-        return sanitized;
+        return items;
     }
 
     private double parsePrice(Object priceObj) {
