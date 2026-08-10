@@ -109,6 +109,7 @@ interface DebtListProps {
 
 function DebtList({ balances, onSelectFriend }: DebtListProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const getInitials = (name: string) => name.slice(0, 2).toUpperCase();
 
   return (
