@@ -4,6 +4,7 @@ import { Calendar, User, DollarSign, X, ChevronDown, ChevronUp, AlertCircle, Rec
 import { useTranslation } from "react-i18next";
 import { C, Card } from "../../App";
 import { SavedBill } from "./SplitScreen";
+import { useCurrency } from "../../context/CurrencyContext";
 
 interface BillHistoryProps {
   bills: SavedBill[];
@@ -13,6 +14,7 @@ interface BillHistoryProps {
 
 export default function BillHistory({ bills, onDeleteBill, userName }: BillHistoryProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [selectedBill, setSelectedBill] = useState<SavedBill | null>(null);
   const myName = userName || t("common.you");
 
@@ -62,7 +64,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   </div>
 
                   <div className="text-right">
-                    <p className="text-[15px] font-extrabold text-gold">${grandTotal.toFixed(2)}</p>
+                    <p className="text-[15px] font-extrabold text-gold">{formatCurrency(grandTotal)}</p>
                     <span className="text-[10px] text-tm uppercase tracking-wider mt-1 block">
                       {itemsCount} {t("split.items")}
                     </span>
@@ -123,7 +125,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-tm uppercase font-bold tracking-wider mb-1">Total Bill</p>
-                    <span className="text-xl font-black text-gold">${selectedBill.grandTotal.toFixed(2)}</span>
+                    <span className="text-xl font-black text-gold">{formatCurrency(selectedBill.grandTotal)}</span>
                   </div>
                 </div>
 
@@ -139,7 +141,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                       >
                         <div className="flex items-start justify-between gap-3 text-sm">
                           <span className="font-bold text-white">{item.name}</span>
-                          <span className="font-semibold text-gold">${item.price.toFixed(2)}</span>
+                          <span className="font-semibold text-gold">{formatCurrency(item.price)}</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5 items-center">
                           <span className="text-[10px] text-tm uppercase font-bold tracking-wider mr-1">Consumers:</span>
@@ -163,12 +165,12 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   <div className="flex justify-between text-xs text-tm">
                     <span>Tax ({selectedBill.taxPercent}%):</span>
                     <span className="font-semibold text-white">
-                      ${(selectedBill.items.reduce((s, i) => s + i.price, 0) * (selectedBill.taxPercent / 100)).toFixed(2)}
+                      {formatCurrency(selectedBill.items.reduce((s, i) => s + i.price, 0) * (selectedBill.taxPercent / 100))}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-tm">
                     <span>Flat Tip:</span>
-                    <span className="font-semibold text-white">${selectedBill.tip.toFixed(2)}</span>
+                    <span className="font-semibold text-white">{formatCurrency(selectedBill.tip)}</span>
                   </div>
                 </div>
 
@@ -193,7 +195,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                             </div>
                             <span className="font-semibold text-white">{isMe ? `${d.name} (You)` : d.name}</span>
                           </div>
-                          <span className="font-bold text-white">${d.total.toFixed(2)}</span>
+                          <span className="font-bold text-white">{formatCurrency(d.total)}</span>
                         </div>
                       );
                     })}
