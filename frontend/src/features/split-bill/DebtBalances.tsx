@@ -134,15 +134,16 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
             const absBalance = Math.abs(item.balance);
 
             return (
-              <div
+              <motion.div
                 key={item.id}
-                className="flex items-center gap-3 px-5 py-4 border-b border-solid last:border-b-0 transition-colors hover:bg-surf/30"
+                onClick={() => onSelectFriend(item)}
+                whileTap={{ scale: 0.98 }}
+                className="flex items-center gap-3 px-5 py-4 border-b border-solid last:border-b-0 transition-colors hover:bg-surf/30 cursor-pointer"
                 style={{ borderColor: C.border }}
               >
                 {/* Avatar */}
                 <div
-                  onClick={() => onSelectFriend(item)}
-                  className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer"
+                  className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm"
                   style={{
                     background: isSettled
                       ? C.surf
@@ -157,7 +158,7 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
                 </div>
 
                 {/* Name & Subtitle */}
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onSelectFriend(item)}>
+                <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-white">{item.name}</p>
                   <p className="text-xs text-tm mt-0.5">
                     {isSettled ? t("debt.allSettled") : isLent ? t("debt.youLent") : t("debt.owesYou")}
@@ -175,7 +176,7 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
                 )}
 
                 {/* Amount and status */}
-                <div className="text-right cursor-pointer" onClick={() => onSelectFriend(item)}>
+                <div className="text-right">
                   <p
                     className={`text-[15px] font-bold ${
                       isSettled ? "text-tm" : isLent ? "text-green-500" : "text-red-500"
@@ -196,8 +197,8 @@ function DebtList({ balances, onSelectFriend }: DebtListProps) {
                   </span>
                 </div>
 
-                <ChevronRight size={16} color={C.tm} className="cursor-pointer" onClick={() => onSelectFriend(item)} />
-              </div>
+                <ChevronRight size={16} color={C.tm} />
+              </motion.div>
             );
           })
         )}
@@ -245,21 +246,22 @@ function DebtDetailModal({
       <motion.div
         className="relative w-full max-w-md rounded-3xl border border-solid shadow-2xl overflow-hidden font-sans"
         style={{ background: C.card, borderColor: C.border }}
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 10 }}
-        transition={{ duration: 0.24, ease: "easeOut" }}
+        exit={{ opacity: 0, scale: 0.97, y: 6 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Header */}
         <div className="px-6 py-5 flex items-center justify-between border-b border-solid" style={{ borderColor: C.border }}>
           <h3 className="font-bold text-white text-[16px]">{t("debt.detailTitle")}</h3>
-          <button
+          <motion.button
             type="button"
             onClick={onClose}
+            whileTap={{ scale: 0.98 }}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-surf cursor-pointer border-0 bg-transparent"
           >
             <X size={16} color={C.tm} />
-          </button>
+          </motion.button>
         </div>
 
         {/* Dynamic Success State Animation Overlay */}
@@ -348,13 +350,14 @@ function DebtDetailModal({
                         {record.isSettled ? (
                           <span className="text-[10px] text-tm uppercase font-bold">{t("debt.settled")}</span>
                         ) : (
-                          <button
+                          <motion.button
                             type="button"
                             onClick={() => onSettleTransaction(friend.name, record.id)}
+                            whileTap={{ scale: 0.98 }}
                             className="text-[10px] text-gold font-bold hover:underline cursor-pointer bg-transparent border-0 p-0"
                           >
                             {t("debt.settledBtn")}
-                          </button>
+                          </motion.button>
                         )}
                       </div>
                     </div>

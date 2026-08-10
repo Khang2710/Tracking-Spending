@@ -41,9 +41,10 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
               const grandTotal = typeof bill?.grandTotal === "number" ? bill.grandTotal : Number(bill?.grandTotal) || 0;
               const itemsCount = Array.isArray(bill?.items) ? bill.items.length : 0;
               return (
-                <div
+                <motion.div
                   key={bill.id}
                   onClick={() => setSelectedBill(bill)}
+                  whileTap={{ scale: 0.98 }}
                   className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer border-b border-solid last:border-b-0 transition-colors hover:bg-surf/30"
                   style={{ borderColor: C.border }}
                 >
@@ -69,7 +70,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                       {itemsCount} {t("split.items")}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               );
             })
           )}
@@ -91,10 +92,10 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
             <motion.div
               className="relative w-full max-w-lg rounded-3xl border border-solid shadow-2xl overflow-hidden"
               style={{ background: C.card, borderColor: C.border }}
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              transition={{ duration: 0.24, ease: "easeOut" }}
+              exit={{ opacity: 0, scale: 0.97, y: 6 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             >
               {/* Header */}
               <div className="px-6 py-5 flex items-center justify-between border-b border-solid" style={{ borderColor: C.border }}>
@@ -102,13 +103,14 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   <h3 className="font-bold text-white text-[16px]">{selectedBill.title}</h3>
                   <p className="text-[11px] text-tm mt-0.5">{selectedBill.date}</p>
                 </div>
-                <button
+                <motion.button
                   type="button"
                   onClick={() => setSelectedBill(null)}
+                  whileTap={{ scale: 0.98 }}
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-surf cursor-pointer border-0 bg-transparent"
                 >
                   <X size={16} color={C.tm} />
-                </button>
+                </motion.button>
               </div>
 
               {/* Scrollable details wrapper */}
@@ -206,25 +208,27 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
               {/* Footer actions */}
               <div className="px-6 py-4 border-t border-solid flex justify-between gap-3" style={{ borderColor: C.border }}>
                 {onDeleteBill && (
-                  <button
+                  <motion.button
                     type="button"
                     onClick={() => {
                       onDeleteBill(selectedBill.id);
                       setSelectedBill(null);
                     }}
+                    whileTap={{ scale: 0.98 }}
                     className="px-4 py-2.5 rounded-xl text-xs font-bold text-red-400 hover:text-white hover:bg-red-500/10 cursor-pointer border border-solid border-red-500/20 bg-transparent transition-colors"
                   >
                     Delete Record
-                  </button>
+                  </motion.button>
                 )}
-                <button
+                <motion.button
                   type="button"
                   onClick={() => setSelectedBill(null)}
+                  whileTap={{ scale: 0.98 }}
                   className="px-6 py-2.5 rounded-xl text-xs font-bold transition-all hover:brightness-110 cursor-pointer border-0 ml-auto"
                   style={{ background: C.gold, color: C.bg }}
                 >
                   Close
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </div>
