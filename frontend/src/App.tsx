@@ -470,7 +470,8 @@ function HomeScreen({
                 color: C.bg,
                 boxShadow: `0 0 0 2px ${C.bg}, 0 0 0 4px ${C.gold}55`,
               }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               onClick={onEditName}
             >
               {initials}
@@ -499,9 +500,10 @@ function HomeScreen({
             </div>
           </div>
           <motion.button
-            className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 cursor-pointer"
             style={{ background: C.gold }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             transition={{ duration: 0.15 }}
             onClick={onAddTransactionClick}
           >
@@ -514,7 +516,7 @@ function HomeScreen({
         {/* Left Column: Budget & Wallets */}
         <div className="flex flex-col gap-5 md:gap-8 md:col-span-8">
           {/* Budget Card */}
-          <motion.div whileHover={{ scale: 1.01 }} transition={{ type: "spring", stiffness: 300 }}>
+          <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }} className="cursor-pointer">
             <Card className="p-4 md:p-6">
               <div className="flex items-center justify-between mb-1">
                 <span
@@ -627,8 +629,8 @@ function HomeScreen({
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.08, duration: 0.35 }}
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     {/* Card Background Glow */}
                     <div
@@ -695,7 +697,7 @@ function HomeScreen({
                 return (
                   <motion.div
                     key={t.id}
-                    className="flex items-center gap-3 px-4 py-3.5 group transition-colors relative"
+                    className="flex items-center gap-3 px-4 py-3.5 group transition-colors relative cursor-pointer"
                     style={{
                       borderBottom:
                         i < transactions.length - 1
@@ -704,8 +706,9 @@ function HomeScreen({
                     }}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 + i * 0.06, duration: 0.3 }}
-                    whileHover={{ backgroundColor: C.surf + "60" }}
+                    transition={{ delay: 0.1 + i * 0.06, duration: 0.18 }}
+                    whileHover={{ scale: 1.01, backgroundColor: C.surf + "60" }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <div
                       className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
@@ -1895,8 +1898,11 @@ function LanguageToggle() {
   };
 
   return (
-    <button
+    <motion.button
       onClick={toggleLanguage}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.15 }}
       className="px-3 py-1.5 rounded-xl font-semibold text-[11px] transition-all duration-300 hover:border-gold/30 hover:bg-surf/40 cursor-pointer border flex items-center gap-1.5"
       style={{
         background: C.card,
@@ -1906,7 +1912,7 @@ function LanguageToggle() {
       title={currentLang.startsWith("vi") ? "Switch to English" : "Chuyển sang Tiếng Việt"}
     >
       <span>{currentLang.startsWith("vi") ? "🇻🇳 VI" : "🇺🇸 EN"}</span>
-    </button>
+    </motion.button>
   );
 }
 
@@ -1914,8 +1920,11 @@ function CurrencyToggle() {
   const { currency, toggleCurrency } = useCurrency();
 
   return (
-    <button
+    <motion.button
       onClick={toggleCurrency}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.15 }}
       className="px-3 py-1.5 rounded-xl font-semibold text-[11px] transition-all duration-300 hover:border-gold/30 hover:bg-surf/40 cursor-pointer border flex items-center gap-1.5"
       style={{
         background: C.card,
@@ -1925,7 +1934,7 @@ function CurrencyToggle() {
       title={currency === "VND" ? "Chuyển sang USD ($)" : "Chuyển sang VND (₫)"}
     >
       <span>{currency === "VND" ? "🇻🇳 ₫ VND" : "🇺🇸 $ USD"}</span>
-    </button>
+    </motion.button>
   );
 }
 
@@ -3108,8 +3117,9 @@ export default function App() {
                   color: C.bg,
                   boxShadow: `0 4px 16px ${C.gold}33`,
                 }}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ duration: 0.15 }}
                 onClick={() => setIsTxModalOpen(true)}
                 title={t("dashboard.newTransaction")}
               >
@@ -3128,10 +3138,10 @@ export default function App() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               >
                 {screens[activeTab]}
               </motion.div>
