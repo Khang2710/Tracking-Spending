@@ -665,7 +665,7 @@ export default function AssignBill({
 
             {/* Option 5: Dynamic Real-time Progress Bar & Status Tracker */}
             {isExtracting && (
-              <div className="mt-4 p-3.5 rounded-xl border flex flex-col gap-2 transition-all" style={{ borderColor: C.gold + "50", background: C.surf + "bb" }}>
+              <div className="mt-4 p-3.5 rounded-xl border flex flex-col gap-2 transition-all relative overflow-hidden" style={{ borderColor: C.gold + "50", background: C.surf + "bb" }}>
                 <div className="flex items-center justify-between text-xs font-semibold">
                   <span className="flex items-center gap-2" style={{ color: C.gold }}>
                     <Sparkles size={14} className="animate-spin" />
@@ -673,7 +673,7 @@ export default function AssignBill({
                   </span>
                   <span style={{ color: C.gold }}>{ocrProgress}%</span>
                 </div>
-                <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: C.bg }}>
+                <div className="w-full rounded-full h-2 overflow-hidden relative" style={{ background: C.bg }}>
                   <div
                     className="h-full rounded-full transition-all duration-500 ease-out"
                     style={{
@@ -683,6 +683,12 @@ export default function AssignBill({
                     }}
                   />
                 </div>
+                <motion.div
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "100%" }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                  className="absolute top-0 bottom-0 w-1/3 bg-gradient-to-r from-transparent via-gold/20 to-transparent pointer-events-none"
+                />
               </div>
             )}
           </Card>
@@ -711,7 +717,8 @@ export default function AssignBill({
                       onClick={() => setSelectedItemId(item.id)}
                       className="cursor-pointer relative overflow-hidden"
                       whileHover={{ scale: 1.015 }}
-                      whileTap={{ scale: 0.995 }}
+                      whileTap={{ scale: 0.98 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 32 }}
                     >
                       <Card
                         className="p-4 transition-all h-full flex flex-col justify-between"
@@ -741,28 +748,38 @@ export default function AssignBill({
                         </div>
 
                         <div className="flex flex-wrap gap-1.5 min-h-[22px] font-sans">
-                          {item.consumers.length === 0 ? null : (
-                            item.consumers.map((c) => (
-                              <span
+                          <AnimatePresence>
+                            {item.consumers.map((c) => (
+                              <motion.span
                                 key={c}
-                                className="text-[10px] px-2 py-0.5 font-bold rounded-lg"
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.8, opacity: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="text-[10px] px-2 py-0.5 font-bold rounded-lg cursor-pointer"
                                 style={{ background: C.gold + "15", color: C.gold }}
                               >
                                 {c}
-                              </span>
-                            ))
-                          )}
+                              </motion.span>
+                            ))}
+                          </AnimatePresence>
                         </div>
                       </Card>
 
-                      {isSelected && (
-                        <div
-                          className="absolute right-3 top-3 w-4 h-4 rounded-full flex items-center justify-center bg-gold text-bg"
-                          style={{ color: C.bg }}
-                        >
-                          <Check size={10} strokeWidth={3} />
-                        </div>
-                      )}
+                      <AnimatePresence>
+                        {isSelected && (
+                          <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute right-3 top-3 w-4 h-4 rounded-full flex items-center justify-center bg-gold text-bg cursor-pointer"
+                            style={{ color: C.bg }}
+                          >
+                            <Check size={10} strokeWidth={3} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   );
                 })
@@ -832,16 +849,23 @@ export default function AssignBill({
                       }}
                       whileHover={{ scale: selectedItem ? 1.06 : 1 }}
                       whileTap={{ scale: selectedItem ? 0.94 : 1 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 32 }}
                     >
                       {initials}
-                      {isAssigned && (
-                        <div
-                          className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border border-solid bg-green-500 text-white"
-                          style={{ borderColor: C.bg }}
-                        >
-                          <Check size={11} className="text-white" strokeWidth={3} />
-                        </div>
-                      )}
+                      <AnimatePresence>
+                        {isAssigned && (
+                          <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border border-solid bg-green-500 text-white"
+                            style={{ borderColor: C.bg }}
+                          >
+                            <Check size={11} className="text-white" strokeWidth={3} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.button>
                     <span className="text-xs font-semibold text-white group-hover:text-gold transition-colors">
                       {isMe ? `${friend} (${t("common.you")})` : friend}
@@ -1048,12 +1072,26 @@ export default function AssignBill({
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="p-6 md:p-8 rounded-3xl border border-white/10 flex flex-col items-center gap-4 bg-[#141416] shadow-2xl text-center max-w-xs mx-auto"
+              className="p-6 md:p-8 rounded-3xl border border-white/10 flex flex-col items-center gap-4 bg-[#141416] shadow-2xl text-center max-w-xs mx-auto relative overflow-hidden"
             >
-              <Loader2 size={40} color={C.gold} className="animate-spin" />
+              {/* Vertical Scanning Line Beam */}
+              <motion.div
+                initial={{ y: "-100%" }}
+                animate={{ y: "250%" }}
+                transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                className="absolute inset-x-0 h-12 bg-gradient-to-b from-transparent via-gold/20 to-transparent pointer-events-none"
+              />
+              <div className="relative">
+                <Loader2 size={40} color={C.gold} className="animate-spin" />
+                <motion.div
+                  animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.7, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                  className="absolute inset-0 rounded-full bg-gold/20 blur-md -z-10"
+                />
+              </div>
               <div>
                 <p className="text-base font-bold text-white font-sans">{ocrLoadingText || t("split.aiReadingReceipt")}</p>
-                <span className="text-xs text-tm font-sans mt-1 block">{t("split.aiReadingHint")}</span>
+                <span className="text-xs text-tm font-sans mt-1 block animate-pulse">{t("split.aiReadingHint")}</span>
               </div>
               <button
                 type="button"
