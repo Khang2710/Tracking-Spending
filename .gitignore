@@ -11,6 +11,8 @@ pnpm-debug.log*
 .vscode/
 *.log
 .agent/
+.agents/
+.superpowers/
 brain/
 .vercel
 .env*
