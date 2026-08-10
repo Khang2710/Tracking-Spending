@@ -1,8 +1,4 @@
-<img width="2888" height="1723" alt="image" src="https://github.com/user-attachments/assets/bec49653-ef1e-4a29-8051-fe66450ca645" /># 💰 Wealthy - Finance & Split Bill Tracking
-
-![UI Preview](![Uploading Capture-2026-08-10-110056.png…]()) 
-
-
+<img width="2888" height="1723" alt="image" src="https://github.com/user-attachments/assets/bec49653-ef1e-4a29-8051-fe66450ca645" /># 💰 
 
 ## 📖 About the Project
 **Wealthy (Tracking Spending)** is a modern Web Application designed to help users manage personal finances and solve the headache of group expenses (Split Bills) intelligently. 
