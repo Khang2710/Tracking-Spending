@@ -42,6 +42,7 @@ import {
 } from "recharts";
 import confetti from "canvas-confetti";
 import SplitScreen from "./features/split-bill/SplitScreen";
+import CashFlowCalendar from "./features/statistics/CashFlowCalendar";
 import { Drawer } from "vaul";
 import { useTranslation } from "react-i18next";
 
@@ -780,6 +781,7 @@ interface StatisticsScreenProps {
   onDeposit: (goalId: number, amount: number) => void;
   onWithdraw: (goalId: number, amount: number) => void;
   onDeleteGoal: (goalId: number) => void;
+  onDeleteTransaction: (id: number) => void;
 }
 
 
@@ -793,11 +795,12 @@ function StatisticsScreen({
   onDeposit,
   onWithdraw,
   onDeleteGoal,
+  onDeleteTransaction,
 }: StatisticsScreenProps) {
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
-  const [statsView, setStatsView] = useState<"stats" | "goals">("stats");
+  const [statsSubTab, setStatsSubTab] = useState<number>(0);
 
   // Compute dynamic chart data based on transactions
   const computedChartData = initialChartData.map((item, idx) => {
@@ -880,32 +883,41 @@ function StatisticsScreen({
       </div>
 
       {/* Segmented Switcher */}
-      <div className="px-5 md:px-0 pb-2">
+      <div className="px-5 md:px-0 pb-4">
         <div
-          className="flex rounded-2xl p-1"
+          className="flex rounded-2xl p-1 gap-1"
           style={{ background: C.card, border: `1px solid ${C.border}` }}
         >
-          {(["stats", "goals"] as const).map((v) => (
+          {[
+            { id: 0, label: "📊 Thống kê" },
+            { id: 1, label: "📅 Lịch dòng tiền" },
+            { id: 2, label: "🐷 Hũ tiết kiệm" },
+          ].map((tab) => (
             <button
-              key={v}
-              onClick={() => setStatsView(v)}
-              className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all duration-300 cursor-pointer"
+              key={tab.id}
+              onClick={() => setStatsSubTab(tab.id)}
+              className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[13px] font-semibold transition-all duration-300 cursor-pointer text-center"
               style={{
-                background: statsView === v ? C.gold : "transparent",
-                color: statsView === v ? C.bg : C.tm,
+                background: statsSubTab === tab.id ? C.gold : "transparent",
+                color: statsSubTab === tab.id ? C.bg : C.tm,
               }}
             >
-              {v === "stats" ? (
-                <><BarChart2 size={14} /> {t("stats.tabStats")}</>
-              ) : (
-                <><PiggyBank size={14} /> {t("stats.tabSavings")}</>
-              )}
+              {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      {statsView === "goals" ? (
+      {statsSubTab === 1 && (
+        <div className="px-5 md:px-0 pb-6">
+          <CashFlowCalendar
+            transactions={transactions}
+            onDeleteTransaction={onDeleteTransaction}
+          />
+        </div>
+      )}
+
+      {statsSubTab === 2 && (
         <div className="px-5 md:px-0 pb-6">
           <SavingsGoalsScreen
             goals={savingsGoals}
@@ -917,7 +929,9 @@ function StatisticsScreen({
             onDelete={onDeleteGoal}
           />
         </div>
-      ) : (
+      )}
+
+      {statsSubTab === 0 && (
       <div className="px-5 md:px-0 flex flex-col md:grid md:grid-cols-12 gap-5 md:gap-8 pb-6">
         {/* Left Column: Chart & Month Selector */}
         <div className="flex flex-col gap-5 md:gap-8 md:col-span-8">
@@ -3031,6 +3045,7 @@ export default function App() {
       onDeposit={handleDepositToGoal}
       onWithdraw={handleWithdrawFromGoal}
       onDeleteGoal={handleDeleteGoal}
+      onDeleteTransaction={handleDeleteTransaction}
     />,
     <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />,
   ];
