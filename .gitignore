@@ -23,6 +23,13 @@ CLAUDE.md
 skills-lock.json
 brain/
 
+# Non-essential root files
+ATTRIBUTIONS.md
+default_shadcn_theme.css
+render.yaml
+pnpm-workspace.yaml
+Dockerfile
+
 # Deploy & Build Artifacts
 .vercel
 dist/
