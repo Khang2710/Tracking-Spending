@@ -8,6 +8,7 @@ import {
   Calendar as CalendarIcon,
   X,
   Trash2,
+  Edit2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "../../context/CurrencyContext";
@@ -16,17 +17,61 @@ import { C, Transaction, Wallet, categoryIcons } from "../../App";
 interface CashFlowCalendarProps {
   transactions: Transaction[];
   onDeleteTransaction: (id: number) => void;
+  onEditTransaction?: (tx: Transaction) => void;
   wallets?: Wallet[];
 }
 
 type FilterMode = "all" | "income" | "expense";
 
+// Helper to extract day, month index (0-11), and year from DD-MM-YYYY or ISO date strings
+const parseDateFull = (dateStr: string): { day: number; month: number; year: number } => {
+  const now = new Date();
+  const defaultRes = { day: now.getDate(), month: now.getMonth(), year: now.getFullYear() };
+  if (!dateStr) return defaultRes;
+
+  const trimmed = dateStr.trim();
+  if (trimmed.startsWith("Today") || trimmed.startsWith("Hôm nay")) {
+    return defaultRes;
+  }
+
+  // Handle DD-MM-YYYY or YYYY-MM-DD or DD/MM/YYYY or YYYY/MM/DD
+  const separator = trimmed.includes("-") ? "-" : trimmed.includes("/") ? "/" : null;
+  if (separator) {
+    const parts = trimmed.split(separator).map((p) => parseInt(p, 10));
+    if (parts.length >= 3 && !parts.some(isNaN)) {
+      if (parts[0] > 1000) {
+        // YYYY-MM-DD
+        return {
+          year: parts[0],
+          month: Math.max(0, Math.min(11, parts[1] - 1)),
+          day: parts[2],
+        };
+      } else if (parts[2] > 1000) {
+        // DD-MM-YYYY (e.g. 10-08-2026 => 10 is Day, 08 is Month, 2026 is Year)
+        return {
+          day: parts[0],
+          month: Math.max(0, Math.min(11, parts[1] - 1)),
+          year: parts[2],
+        };
+      }
+    }
+  }
+
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear() };
+  }
+
+  return defaultRes;
+};
+
 export default function CashFlowCalendar({
   transactions,
   onDeleteTransaction,
+  onEditTransaction,
   wallets,
 }: CashFlowCalendarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { formatCurrency, currency, exchangeRate } = useCurrency();
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -37,10 +82,13 @@ export default function CashFlowCalendar({
   const month = currentDate.getMonth();
 
   // Helper to format month name
-  const monthLabel = currentDate.toLocaleDateString("vi-VN", {
-    month: "long",
-    year: "numeric",
-  });
+  const monthLabel = currentDate.toLocaleDateString(
+    i18n.language?.startsWith("vi") ? "vi-VN" : "en-US",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  );
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -56,8 +104,8 @@ export default function CashFlowCalendar({
   const monthTxs = useMemo(() => {
     return transactions.filter((tx) => {
       if (!tx.date) return false;
-      const d = new Date(tx.date);
-      return !isNaN(d.getTime()) && d.getFullYear() === year && d.getMonth() === month;
+      const info = parseDateFull(tx.date);
+      return info.year === year && info.month === month;
     });
   }, [transactions, year, month]);
 
@@ -83,7 +131,7 @@ export default function CashFlowCalendar({
       map[i] = { income: 0, expense: 0, txs: [] };
     }
     monthTxs.forEach((tx) => {
-      const dayNum = new Date(tx.date).getDate();
+      const dayNum = parseDateFull(tx.date).day;
       if (map[dayNum]) {
         map[dayNum].txs.push(tx);
         if (tx.amount > 0) map[dayNum].income += tx.amount;
@@ -101,14 +149,10 @@ export default function CashFlowCalendar({
     if (currency === "USD") {
       const usdVal = val / exchangeRate;
       const abs = Math.abs(usdVal);
-      if (abs >= 1000000) return `$${(abs / 1000000).toFixed(1)}M`;
-      if (abs >= 1000) return `$${(abs / 1000).toFixed(0)}k`;
-      return `$${abs.toFixed(abs % 1 === 0 ? 0 : 2)}`;
+      return `$${abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
     } else {
       const abs = Math.abs(val);
-      if (abs >= 1000000) return `${(abs / 1000000).toFixed(1)}M`;
-      if (abs >= 1000) return `${(abs / 1000).toFixed(0)}k`;
-      return `${abs}`;
+      return `${abs.toLocaleString("vi-VN")}`;
     }
   };
 
@@ -142,7 +186,7 @@ export default function CashFlowCalendar({
 
         {/* Net Balance Banner */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#8A8A8A] font-medium">Dòng tiền ròng</span>
+          <span className="text-xs text-[#8A8A8A] font-medium">{t("stats.netCashFlow", "Dòng tiền ròng")}</span>
           <span
             className={`text-2xl md:text-3xl font-bold font-mono ${
               netCashFlow >= 0 ? "text-[#3DDC84]" : "text-[#FF6B6B]"
@@ -160,7 +204,7 @@ export default function CashFlowCalendar({
               <ArrowDownLeft size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] text-[#8A8A8A]">Tiền vào</span>
+              <span className="text-[11px] text-[#8A8A8A]">{t("stats.moneyIn", "Tiền vào")}</span>
               <span className="text-sm font-bold text-[#3DDC84] font-mono">
                 {formatCurrency(totalIncome)}
               </span>
@@ -172,7 +216,7 @@ export default function CashFlowCalendar({
               <ArrowUpRight size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] text-[#8A8A8A]">Tiền ra</span>
+              <span className="text-[11px] text-[#8A8A8A]">{t("stats.moneyOut", "Tiền ra")}</span>
               <span className="text-sm font-bold text-[#FF6B6B] font-mono">
                 {formatCurrency(totalExpense)}
               </span>
@@ -185,7 +229,7 @@ export default function CashFlowCalendar({
       <div className="bg-[#17171A] p-4 md:p-6 rounded-3xl border border-white/10 flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-base font-bold flex items-center gap-2">
-            <CalendarIcon size={18} color={C.gold} /> Lịch Chi Tiết
+            <CalendarIcon size={18} color={C.gold} /> {t("stats.detailedCalendar", "Lịch Chi Tiết")}
           </h3>
 
           <div className="flex items-center gap-1 bg-[#0F0F10] p-1 rounded-xl border border-white/10">
@@ -200,7 +244,11 @@ export default function CashFlowCalendar({
                     : "text-[#8A8A8A] hover:text-white"
                 }`}
               >
-                {mode === "income" ? "Tiền vào" : mode === "expense" ? "Tiền ra" : "Dòng tiền"}
+                {mode === "income"
+                  ? t("stats.moneyIn", "Tiền vào")
+                  : mode === "expense"
+                  ? t("stats.moneyOut", "Tiền ra")
+                  : t("stats.netCashFlow", "Dòng tiền")}
               </button>
             ))}
           </div>
@@ -310,7 +358,13 @@ export default function CashFlowCalendar({
                     return (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-2xl bg-[#17171A] border border-white/5"
+                        onClick={() => {
+                          if (onEditTransaction) {
+                            setSelectedDay(null);
+                            onEditTransaction(tx);
+                          }
+                        }}
+                        className="flex items-center justify-between p-3 rounded-2xl bg-[#17171A] border border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-[#C9A45B]">
@@ -324,7 +378,7 @@ export default function CashFlowCalendar({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           <span
                             className={`text-xs font-bold font-mono ${
                               isIncome ? "text-[#3DDC84]" : "text-[#FF6B6B]"
@@ -333,10 +387,28 @@ export default function CashFlowCalendar({
                             {isIncome ? "+" : ""}
                             {formatCurrency(tx.amount)}
                           </span>
+                          {onEditTransaction && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedDay(null);
+                                onEditTransaction(tx);
+                              }}
+                              className="text-[#8A8A8A] hover:text-[#C9A45B] p-1 cursor-pointer transition-colors"
+                              title="Sửa giao dịch"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => onDeleteTransaction(tx.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteTransaction(tx.id);
+                            }}
                             className="text-[#8A8A8A] hover:text-[#FF6B6B] p-1 cursor-pointer transition-colors"
+                            title="Xóa giao dịch"
                           >
                             <Trash2 size={14} />
                           </button>

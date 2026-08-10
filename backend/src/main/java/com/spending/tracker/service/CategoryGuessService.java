@@ -62,17 +62,21 @@ public class CategoryGuessService {
                 headers.setContentType(MediaType.APPLICATION_JSON);
 
                 HttpEntity<GeminiRequest> entity = new HttpEntity<>(requestPayload, headers);
-                ResponseEntity<Map> response = restTemplate.postForEntity(apiUrl, entity, Map.class);
+                @SuppressWarnings("unchecked")
+                ResponseEntity<Map<String, Object>> response = (ResponseEntity<Map<String, Object>>) (ResponseEntity<?>) restTemplate.postForEntity(apiUrl, entity, Map.class);
 
                 if (response.getBody() != null && response.getBody().containsKey("candidates")) {
-                    List candidates = (List) response.getBody().get("candidates");
-                    if (!candidates.isEmpty()) {
-                        Map firstCandidate = (Map) candidates.get(0);
-                        Map content = (Map) firstCandidate.get("content");
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.getBody().get("candidates");
+                    if (candidates != null && !candidates.isEmpty()) {
+                        Map<String, Object> firstCandidate = candidates.get(0);
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> content = (Map<String, Object>) firstCandidate.get("content");
                         if (content != null && content.containsKey("parts")) {
-                            List parts = (List) content.get("parts");
-                            if (!parts.isEmpty()) {
-                                Map firstPart = (Map) parts.get(0);
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
+                            if (parts != null && !parts.isEmpty()) {
+                                Map<String, Object> firstPart = parts.get(0);
                                 String text = (String) firstPart.get("text");
                                 if (text != null && !text.trim().isEmpty()) {
                                     String aiResult = text.trim().replaceAll("[^a-zA-Z]", "");

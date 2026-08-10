@@ -31,6 +31,7 @@ import {
   UtensilsCrossed,
   Coffee,
   ShoppingBasket,
+  Calendar,
 } from "lucide-react";
 import {
   AreaChart,
@@ -384,6 +385,7 @@ interface HomeScreenProps {
   onEditName: () => void;
   onEditWalletClick: (wallet: Wallet) => void;
   onDeleteTransaction: (id: number) => void;
+  onEditTransaction: (tx: Transaction) => void;
 }
 
 function HomeScreen({
@@ -397,6 +399,7 @@ function HomeScreen({
   onEditName,
   onEditWalletClick,
   onDeleteTransaction,
+  onEditTransaction,
 }: HomeScreenProps) {
   const { t, i18n } = useTranslation();
   const { formatCurrency } = useCurrency();
@@ -691,13 +694,14 @@ function HomeScreen({
                 {t("dashboard.noTransactions")}
               </div>
             ) : (
-              transactions.map((t, i) => {
-                const isPositive = t.amount > 0;
-                const IconComponent = categoryIcons[t.category] || categoryIcons.Others;
-                const iconColor = categoryColors[t.category] || categoryColors.Others;
+              transactions.map((tx, i) => {
+                const isPositive = tx.amount > 0;
+                const IconComponent = categoryIcons[tx.category] || categoryIcons.Others;
+                const iconColor = categoryColors[tx.category] || categoryColors.Others;
                 return (
                   <motion.div
-                    key={t.id}
+                    key={tx.id}
+                    onClick={() => onEditTransaction(tx)}
                     className="flex items-center gap-3 px-4 py-3.5 group transition-colors relative cursor-pointer"
                     style={{
                       borderBottom:
@@ -726,13 +730,13 @@ function HomeScreen({
                         className="text-[14px] font-semibold truncate"
                         style={{ color: C.white }}
                       >
-                        {t.name}
+                        {tx.name}
                       </p>
                       <p
                         className="text-[12px] mt-0.5"
                         style={{ color: C.tm }}
                       >
-                        {t.date}
+                        {tx.date}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -742,22 +746,34 @@ function HomeScreen({
                         <ArrowDownRight size={13} color={C.red} strokeWidth={2.5} />
                       )}
                       <span
-                        className="text-[14px] font-bold"
+                        className="text-[14px] font-bold font-mono"
                         style={{ color: isPositive ? C.green : C.red }}
                       >
-                        {isPositive ? "+" : "-"}{formatCurrency(Math.abs(t.amount))}
+                        {isPositive ? "+" : "-"}{formatCurrency(Math.abs(tx.amount))}
                       </span>
-                      {/* Delete button – shows on hover */}
-                      <motion.button
-                        onClick={(e) => { e.stopPropagation(); onDeleteTransaction(t.id); }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ml-1"
-                        style={{ background: "#FF453A22" }}
-                        whileHover={{ scale: 1.15, background: "#FF453A44" }}
-                        whileTap={{ scale: 0.9 }}
-                        title="Xóa giao dịch"
-                      >
-                        <Trash2 size={11} color="#FF453A" strokeWidth={2.5} />
-                      </motion.button>
+                      {/* Action buttons – shows on hover */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1">
+                        <motion.button
+                          onClick={(e) => { e.stopPropagation(); onEditTransaction(tx); }}
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+                          style={{ background: C.gold + "22" }}
+                          whileHover={{ scale: 1.15, background: C.gold + "44" }}
+                          whileTap={{ scale: 0.9 }}
+                          title={t("common.edit", "Sửa")}
+                        >
+                          <Edit2 size={11} color={C.gold} strokeWidth={2.5} />
+                        </motion.button>
+                        <motion.button
+                          onClick={(e) => { e.stopPropagation(); onDeleteTransaction(tx.id); }}
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+                          style={{ background: "#FF453A22" }}
+                          whileHover={{ scale: 1.15, background: "#FF453A44" }}
+                          whileTap={{ scale: 0.9 }}
+                          title={t("common.delete", "Xóa")}
+                        >
+                          <Trash2 size={11} color="#FF453A" strokeWidth={2.5} />
+                        </motion.button>
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -772,6 +788,7 @@ function HomeScreen({
 
 // ─── STATISTICS SCREEN ────────────────────────────────────────────────────────
 interface StatisticsScreenProps {
+  wallets: Wallet[];
   transactions: Transaction[];
   budget: number;
   savingsGoals: SavingsGoal[];
@@ -782,10 +799,12 @@ interface StatisticsScreenProps {
   onWithdraw: (goalId: number, amount: number) => void;
   onDeleteGoal: (goalId: number) => void;
   onDeleteTransaction: (id: number) => void;
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
 
 function StatisticsScreen({
+  wallets,
   transactions,
   budget,
   savingsGoals,
@@ -796,6 +815,7 @@ function StatisticsScreen({
   onWithdraw,
   onDeleteGoal,
   onDeleteTransaction,
+  onEditTransaction,
 }: StatisticsScreenProps) {
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
@@ -889,22 +909,30 @@ function StatisticsScreen({
           style={{ background: C.card, border: `1px solid ${C.border}` }}
         >
           {[
-            { id: 0, label: "📊 Thống kê" },
-            { id: 1, label: "📅 Lịch dòng tiền" },
-            { id: 2, label: "🐷 Hũ tiết kiệm" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatsSubTab(tab.id)}
-              className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[13px] font-semibold transition-all duration-300 cursor-pointer text-center"
-              style={{
-                background: statsSubTab === tab.id ? C.gold : "transparent",
-                color: statsSubTab === tab.id ? C.bg : C.tm,
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 0, label: t("stats.tabStats", "Thống kê"), icon: BarChart2 },
+            { id: 1, label: t("stats.tabCashFlow", "Lịch dòng tiền"), icon: Calendar },
+            { id: 2, label: t("stats.tabSavings", "Hũ tiết kiệm"), icon: PiggyBank },
+          ].map((tab) => {
+            const IconComp = tab.icon;
+            const isActive = statsSubTab === tab.id;
+            return (
+              <motion.button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatsSubTab(tab.id)}
+                whileTap={{ scale: 0.97 }}
+                className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative"
+                style={{
+                  background: isActive ? C.gold : "transparent",
+                  color: isActive ? C.bg : C.tm,
+                  boxShadow: isActive ? "0 2px 10px rgba(201, 164, 91, 0.25)" : "none",
+                }}
+              >
+                <IconComp size={15} strokeWidth={2.2} />
+                <span>{tab.label}</span>
+              </motion.button>
+            );
+          })}
         </div>
       </div>
 
@@ -912,7 +940,9 @@ function StatisticsScreen({
         <div className="px-5 md:px-0 pb-6">
           <CashFlowCalendar
             transactions={transactions}
+            wallets={wallets}
             onDeleteTransaction={onDeleteTransaction}
+            onEditTransaction={onEditTransaction}
           />
         </div>
       )}
@@ -2235,6 +2265,9 @@ function AddTransactionForm({
   wallets: Wallet[];
   onAdd: (tx: Omit<Transaction, "id">, walletId: number) => void;
 }) {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<"income" | "outcome">("outcome");
@@ -2264,7 +2297,6 @@ function AddTransactionForm({
 
   useEffect(() => {
     if (guessedCategory && !hasManuallySelected) {
-      // Map to correct category list if necessary
       const matchedCat = categories.find(c => c.toLowerCase() === guessedCategory.toLowerCase()) || "Others";
       setCategory(matchedCat);
     }
@@ -2278,7 +2310,7 @@ function AddTransactionForm({
     
     const finalAmount = type === "outcome" ? -numAmt : numAmt;
     const [year, month, day] = date.split("-");
-    const formattedDate = `${day}-${month}-${year}`;
+    const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
 
     onAdd({
       name,
@@ -2295,29 +2327,31 @@ function AddTransactionForm({
         <button
           type="button"
           onClick={() => setType("outcome")}
-          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer"
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
           style={{
             background: type === "outcome" ? C.red : "transparent",
             color: type === "outcome" ? C.white : C.tm,
           }}
         >
-          Expense
+          {t("stats.outcome", "Chi tiêu")}
         </button>
         <button
           type="button"
           onClick={() => setType("income")}
-          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer"
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
           style={{
             background: type === "income" ? C.green : "transparent",
             color: type === "income" ? C.bg : C.tm,
           }}
         >
-          Income
+          {t("stats.income", "Thu nhập")}
         </button>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Description</label>
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.description", "Mô tả / Tên giao dịch")}
+        </label>
         <input
           type="text"
           required
@@ -2335,13 +2369,15 @@ function AddTransactionForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Amount ($)</label>
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.amount", "Số tiền")}
+        </label>
         <input
           type="number"
           step="0.01"
           min="0.01"
           required
-          placeholder="0.00"
+          placeholder="0"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
@@ -2351,7 +2387,9 @@ function AddTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-tm font-medium">Category</label>
+          <label className="text-xs text-tm font-medium">
+            {t("dashboard.category", "Danh mục")}
+          </label>
           {isGuessing && (
             <div className="flex items-center gap-1 text-[11px] text-gold font-medium animate-pulse">
               <Loader2 size={11} className="animate-spin text-gold" />
@@ -2377,7 +2415,9 @@ function AddTransactionForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Pay With / Deposit To</label>
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.payWith", "Tài khoản / Ví")}
+        </label>
         <select
           value={walletId}
           onChange={(e) => setWalletId(Number(e.target.value))}
@@ -2386,14 +2426,16 @@ function AddTransactionForm({
         >
           {wallets.map((w) => (
             <option key={w.id} value={w.id} className="bg-sec">
-              {w.label} (Bal: ${w.balance})
+              {w.label} ({formatCurrency(w.balance)})
             </option>
           ))}
         </select>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Date</label>
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.date", "Ngày giao dịch")}
+        </label>
         <input
           type="date"
           required
@@ -2409,8 +2451,203 @@ function AddTransactionForm({
         className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer"
         style={{ background: C.gold, color: C.bg }}
       >
-        Save Transaction
+        {t("dashboard.saveTransaction", "Lưu giao dịch")}
       </button>
+    </form>
+  );
+}
+
+function EditTransactionForm({
+  transaction,
+  wallets,
+  onSave,
+  onDelete,
+}: {
+  transaction: Transaction;
+  wallets: Wallet[];
+  onSave: (updatedTx: Transaction) => void;
+  onDelete?: (id: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+
+  const [name, setName] = useState(transaction.name);
+  const [amount, setAmount] = useState(String(Math.abs(transaction.amount)));
+  const [type, setType] = useState<"income" | "outcome">(
+    transaction.amount < 0 ? "outcome" : "income"
+  );
+  const [category, setCategory] = useState(transaction.category || "Others");
+  const [walletId, setWalletId] = useState(transaction.walletId || wallets[0]?.id || 1);
+
+  // Convert DD-MM-YYYY to YYYY-MM-DD for <input type="date" />
+  const [date, setDate] = useState(() => {
+    if (!transaction.date) return new Date().toISOString().split("T")[0];
+    const parts = transaction.date.split("-");
+    if (parts.length === 3 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    }
+    return transaction.date;
+  });
+
+  const categories = [
+    "Food",
+    "Drinks",
+    "Groceries",
+    "Shopping",
+    "Fuel",
+    "Housing",
+    "Entertainment",
+    "Salary",
+    "Bank",
+    "Investment",
+    "Others",
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !amount) return;
+    const numAmt = parseFloat(amount);
+    if (isNaN(numAmt) || numAmt <= 0) return;
+
+    const finalAmount = type === "outcome" ? -numAmt : numAmt;
+    const [year, month, day] = date.split("-");
+    const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
+
+    onSave({
+      ...transaction,
+      name,
+      amount: finalAmount,
+      category,
+      date: formattedDate,
+      walletId,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
+      <div className="flex gap-2 p-1 rounded-xl bg-surf">
+        <button
+          type="button"
+          onClick={() => setType("outcome")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "outcome" ? C.red : "transparent",
+            color: type === "outcome" ? C.white : C.tm,
+          }}
+        >
+          {t("stats.outcome", "Chi tiêu")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setType("income")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "income" ? C.green : "transparent",
+            color: type === "income" ? C.bg : C.tm,
+          }}
+        >
+          {t("stats.income", "Thu nhập")}
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.description", "Mô tả / Tên giao dịch")}
+        </label>
+        <input
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.amount", "Số tiền")}
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.category", "Danh mục")}
+        </label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat} className="bg-sec">
+              {cat}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.payWith", "Tài khoản / Ví")}
+        </label>
+        <select
+          value={walletId}
+          onChange={(e) => setWalletId(Number(e.target.value))}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        >
+          {wallets.map((w) => (
+            <option key={w.id} value={w.id} className="bg-sec">
+              {w.label} ({formatCurrency(w.balance)})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.date", "Ngày giao dịch")}
+        </label>
+        <input
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex items-center gap-3 mt-2">
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(transaction.id)}
+            className="flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30"
+          >
+            {t("common.delete", "Xóa")}
+          </button>
+        )}
+        <button
+          type="submit"
+          className="flex-[2] py-3 rounded-xl font-bold transition-all cursor-pointer"
+          style={{ background: C.gold, color: C.bg }}
+        >
+          {t("dashboard.saveTransaction", "Lưu giao dịch")}
+        </button>
+      </div>
     </form>
   );
 }
@@ -2785,6 +3022,8 @@ export default function App() {
 
   // Modal Visibility States
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [isEditTxModalOpen, setIsEditTxModalOpen] = useState(false);
+  const [selectedTxToEdit, setSelectedTxToEdit] = useState<Transaction | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isEditWalletModalOpen, setIsEditWalletModalOpen] = useState(false);
   const [selectedWalletToEdit, setSelectedWalletToEdit] = useState<Wallet | null>(null);
@@ -2915,6 +3154,39 @@ export default function App() {
     );
   };
 
+  const handleEditTxClick = (tx: Transaction) => {
+    setSelectedTxToEdit(tx);
+    setIsEditTxModalOpen(true);
+  };
+
+  const handleSaveTxEdit = (updatedTx: Transaction) => {
+    const oldTx = transactions.find((t) => t.id === updatedTx.id);
+    if (!oldTx) return;
+
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === updatedTx.id ? updatedTx : t))
+    );
+
+    setWallets((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((w) => {
+        let newBal = w.balance;
+        // Revert old tx amount from old wallet
+        if (w.id === oldTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
+          newBal -= oldTx.amount;
+        }
+        // Add updated tx amount to updated wallet
+        if (w.id === updatedTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
+          newBal += updatedTx.amount;
+        }
+        return { ...w, balance: newBal };
+      });
+    });
+
+    setIsEditTxModalOpen(false);
+    setSelectedTxToEdit(null);
+  };
+
   // Handle addition of a wallet
   const handleAddWallet = (newWallet: Omit<Wallet, "id">) => {
     const nextId = Math.max(0, ...wallets.map((w) => w.id)) + 1;
@@ -3034,8 +3306,10 @@ export default function App() {
       onEditName={handleEditName}
       onEditWalletClick={handleEditWalletClick}
       onDeleteTransaction={handleDeleteTransaction}
+      onEditTransaction={handleEditTxClick}
     />,
     <StatisticsScreen
+      wallets={wallets}
       transactions={transactions}
       budget={budget}
       savingsGoals={savingsGoals}
@@ -3046,6 +3320,7 @@ export default function App() {
       onWithdraw={handleWithdrawFromGoal}
       onDeleteGoal={handleDeleteGoal}
       onDeleteTransaction={handleDeleteTransaction}
+      onEditTransaction={handleEditTxClick}
     />,
     <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />,
   ];
@@ -3079,17 +3354,7 @@ export default function App() {
             <div className="flex items-center gap-2 min-w-0">
               <div>
                 <div className="hidden sm:flex items-center gap-2 mb-0.5">
-                  <span
-                    className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                    style={{
-                      background: C.gold + "1a",
-                      color: C.gold,
-                      border: `1px solid ${C.gold}33`,
-                    }}
-                  >
-                    PRO DASHBOARD
-                  </span>
-                  <span className="text-[11px] md:text-[12px] hidden md:inline" style={{ color: C.tm }}>
+                  <span className="text-[11px] md:text-[15px] hidden md:inline" style={{ color: C.tm }}>
                     • {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                   </span>
                 </div>
@@ -3179,13 +3444,15 @@ export default function App() {
             {/* Content Container */}
             <div className="p-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
-                <Drawer.Title className="text-[18px] font-bold text-white">New Transaction</Drawer.Title>
+                <Drawer.Title className="text-[18px] font-bold text-white">
+                  {t("dashboard.newTransaction", "Thêm giao dịch")}
+                </Drawer.Title>
                 <Drawer.Description className="sr-only">Add a new expense or income transaction</Drawer.Description>
                 <button
                   onClick={() => setIsTxModalOpen(false)}
                   className="text-[13px] font-medium text-tm hover:text-white px-2 py-1 rounded-lg transition-colors cursor-pointer"
                 >
-                  Close
+                  {t("common.close", "Đóng")}
                 </button>
               </div>
               <AddTransactionForm wallets={wallets} onAdd={handleAddTransaction} />
@@ -3194,8 +3461,31 @@ export default function App() {
         </Drawer.Portal>
       </Drawer.Root>
 
+      {/* Edit Transaction Modal */}
+      <Modal
+        isOpen={isEditTxModalOpen}
+        onClose={() => {
+          setIsEditTxModalOpen(false);
+          setSelectedTxToEdit(null);
+        }}
+        title={t("dashboard.editTransaction", "Chỉnh sửa giao dịch")}
+      >
+        {selectedTxToEdit && (
+          <EditTransactionForm
+            transaction={selectedTxToEdit}
+            wallets={wallets}
+            onSave={handleSaveTxEdit}
+            onDelete={(id) => {
+              handleDeleteTransaction(id);
+              setIsEditTxModalOpen(false);
+              setSelectedTxToEdit(null);
+            }}
+          />
+        )}
+      </Modal>
+
       {/* Add Wallet Modal */}
-      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)} title="New Wallet">
+      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)} title={t("dashboard.activeWallets", "Tạo ví mới")}>
         <AddWalletForm onAdd={handleAddWallet} />
       </Modal>
 

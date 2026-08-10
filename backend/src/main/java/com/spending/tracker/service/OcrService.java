@@ -109,13 +109,16 @@ public class OcrService {
             requestBody.put("messages", Arrays.asList(systemMessage, userMessage));
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(apiUrl, entity, Map.class);
+            @SuppressWarnings("unchecked")
+            ResponseEntity<Map<String, Object>> response = (ResponseEntity<Map<String, Object>>) (ResponseEntity<?>) restTemplate.postForEntity(apiUrl, entity, Map.class);
 
             if (response.getBody() != null && response.getBody().containsKey("choices")) {
-                List choices = (List) response.getBody().get("choices");
-                if (!choices.isEmpty()) {
-                    Map firstChoice = (Map) choices.get(0);
-                    Map message = (Map) firstChoice.get("message");
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
+                if (choices != null && !choices.isEmpty()) {
+                    Map<String, Object> firstChoice = choices.get(0);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> message = (Map<String, Object>) firstChoice.get("message");
                     if (message != null && message.containsKey("content")) {
                         String rawContent = (String) message.get("content");
                         return parseFoodItemsJson(rawContent);
@@ -147,7 +150,9 @@ public class OcrService {
                     String jsonObjStr = cleanText.substring(objStart, objEnd + 1);
                     Map<String, Object> rootMap = mapper.readValue(jsonObjStr, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                     if (rootMap.containsKey("items") && rootMap.get("items") instanceof List) {
-                        list = (List<Map<String, Object>>) rootMap.get("items");
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> itemsList = (List<Map<String, Object>>) rootMap.get("items");
+                        list = itemsList;
                     }
                 }
             }
