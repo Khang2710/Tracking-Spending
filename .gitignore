@@ -1,19 +1,29 @@
+# Dependencies
 node_modules/
+
+# OS & Editor
 .DS_Store
-.env
-.env.*
-!.env.example
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 .idea/
 .vscode/
 *.log
+
+# Environment & Credentials
+.env
+.env.*
+!.env.example
+.env.local
+
+# AI Agent, Assistant & Internal Docs
 .agent/
 .agents/
 .superpowers/
+docs/superpowers/
+guidelines/
+CLAUDE.md
+skills-lock.json
 brain/
+
+# Deploy & Build Artifacts
 .vercel
-.env*
-.env.local
+dist/
+build/
