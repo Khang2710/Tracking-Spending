@@ -155,7 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             Authorization: `Bearer ${groqKey}`,
           },
           body: JSON.stringify({
-            model: "llama-3.2-11b-vision-preview",
+            model: "qwen/qwen3.6-27b",
             max_tokens: 1000,
             messages: [
               { role: "system", content: PROMPT_TEXT },
