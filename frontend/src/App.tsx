@@ -439,7 +439,7 @@ function HomeScreen({
   const pctSpent = Math.min(Math.round(rawBudgetPct), 100);
   const overAmount = Math.max(0, totalCurrentOutcome - budget);
 
-  let progressColor = C.gold;
+  let progressColor: string = C.gold;
   if (rawBudgetPct >= 100) {
     progressColor = "#EF4444";
   } else if (rawBudgetPct >= 80) {
@@ -921,15 +921,15 @@ function StatisticsScreen({
                 type="button"
                 onClick={() => setStatsSubTab(tab.id)}
                 whileTap={{ scale: 0.97 }}
-                className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative"
+                className="flex-1 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 text-[11px] sm:text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative whitespace-nowrap min-w-0"
                 style={{
                   background: isActive ? C.gold : "transparent",
                   color: isActive ? C.bg : C.tm,
                   boxShadow: isActive ? "0 2px 10px rgba(201, 164, 91, 0.25)" : "none",
                 }}
               >
-                <IconComp size={15} strokeWidth={2.2} />
-                <span>{tab.label}</span>
+                <IconComp size={14} strokeWidth={2.2} className="shrink-0" />
+                <span className="truncate">{tab.label}</span>
               </motion.button>
             );
           })}
@@ -1456,7 +1456,7 @@ function AddGoalModal({
   const [targetAmount, setTargetAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [selectedIcon, setSelectedIcon] = useState("PiggyBank");
-  const [selectedColor, setSelectedColor] = useState(C.gold);
+  const [selectedColor, setSelectedColor] = useState<string>(C.gold);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1706,7 +1706,7 @@ function SavingsGoalsScreen({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {goals.map((goal) => (
-              <GoalCard
+              <SavingsGoalCard
                 key={goal.id}
                 goal={goal}
                 onClick={setSelectedGoal}
@@ -2236,7 +2236,7 @@ function useAutoCategory(title: string, hasManuallySelected: boolean) {
     const delayDebounce = setTimeout(async () => {
       try {
         const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
-        const url = `${backendHost}/api/transactions/guess-category?title=${encodeURIComponent(title.trim())}`;
+        const url = `${backendHost}/api/ai/guess-category?title=${encodeURIComponent(title.trim())}`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -2479,14 +2479,21 @@ function EditTransactionForm({
   const [category, setCategory] = useState(transaction.category || "Others");
   const [walletId, setWalletId] = useState(transaction.walletId || wallets[0]?.id || 1);
 
-  // Convert DD-MM-YYYY to YYYY-MM-DD for <input type="date" />
+  // Convert DD-MM-YYYY or ISO format to YYYY-MM-DD for <input type="date" />
   const [date, setDate] = useState(() => {
     if (!transaction.date) return new Date().toISOString().split("T")[0];
-    const parts = transaction.date.split("-");
-    if (parts.length === 3 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    const cleanDate = transaction.date.split("T")[0].trim();
+    const parts = cleanDate.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
     }
-    return transaction.date;
+    return new Date().toISOString().split("T")[0];
   });
 
   const categories = [
@@ -2659,7 +2666,7 @@ function AddWalletForm({
 }) {
   const [label, setLabel] = useState("");
   const [balance, setBalance] = useState("");
-  const [accent, setAccent] = useState(C.purple);
+  const [accent, setAccent] = useState<string>(C.purple);
 
   const colors = [
     { label: "Purple", value: C.purple },
@@ -2897,6 +2904,7 @@ function EditBudgetForm({
   initialBudget: number;
   onSave: (newBudget: number) => void;
 }) {
+  const { t } = useTranslation();
   const [budgetVal, setBudgetVal] = useState(initialBudget === 0 ? "" : initialBudget.toString());
 
   const handleSubmit = (e: React.FormEvent) => {

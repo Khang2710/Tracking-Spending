@@ -143,16 +143,36 @@ export default function CashFlowCalendar({
 
   const selectedDayTxs = selectedDay ? dailyData[selectedDay]?.txs || [] : [];
 
-  // Helper for compact day amount string
+  // Helper for compact day amount string (e.g. 200k, 1.5M, 2B, or $200, $1.5k)
   const formatCompact = (val: number) => {
     if (val === 0) return "";
+    const num = currency === "USD" ? val / exchangeRate : val;
+    const abs = Math.abs(num);
+
     if (currency === "USD") {
-      const usdVal = val / exchangeRate;
-      const abs = Math.abs(usdVal);
-      return `$${abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+      if (abs >= 1_000_000) {
+        const formatted = (abs / 1_000_000).toFixed(1).replace(/\.0$/, "");
+        return `$${formatted}M`;
+      }
+      if (abs >= 1_000) {
+        const formatted = (abs / 1_000).toFixed(1).replace(/\.0$/, "");
+        return `$${formatted}k`;
+      }
+      return `$${Math.round(abs)}`;
     } else {
-      const abs = Math.abs(val);
-      return `${abs.toLocaleString("vi-VN")}`;
+      if (abs >= 1_000_000_000) {
+        const formatted = (abs / 1_000_000_000).toFixed(1).replace(/\.0$/, "");
+        return `${formatted}B`;
+      }
+      if (abs >= 1_000_000) {
+        const formatted = (abs / 1_000_000).toFixed(1).replace(/\.0$/, "");
+        return `${formatted}M`;
+      }
+      if (abs >= 1_000) {
+        const formatted = (abs / 1_000).toFixed(0);
+        return `${formatted}k`;
+      }
+      return `${Math.round(abs)}`;
     }
   };
 
@@ -297,22 +317,32 @@ export default function CashFlowCalendar({
               }
             }
 
+            const fullAmountStr =
+              filterMode === "income" && data.income > 0
+                ? `+${formatCurrency(data.income)}`
+                : filterMode === "expense" && data.expense > 0
+                ? `-${formatCurrency(data.expense)}`
+                : filterMode === "all" && data.income - data.expense !== 0
+                ? `${data.income - data.expense > 0 ? "+" : "-"}${formatCurrency(Math.abs(data.income - data.expense))}`
+                : "";
+
             return (
               <motion.div
                 key={dayNum}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setSelectedDay(dayNum)}
-                className={`h-14 md:h-16 rounded-xl p-1.5 md:p-2 flex flex-col justify-between cursor-pointer border transition-all ${
+                className={`h-13 md:h-16 rounded-xl p-1 md:p-2 flex flex-col justify-between cursor-pointer border transition-all overflow-hidden ${
                   isToday
                     ? "border-[#C9A45B] bg-[#C9A45B]/10"
                     : selectedDay === dayNum
                     ? "border-white/30 bg-[#242428]"
                     : "border-white/5 bg-[#1E1E21] hover:bg-[#242428]"
                 }`}
+                title={fullAmountStr ? `${dayNum}: ${fullAmountStr}` : undefined}
               >
-                <span className="text-[11px] font-bold text-white">{dayNum}</span>
-                <span className={`text-[10px] md:text-[11px] font-bold font-mono truncate ${textColor}`}>
+                <span className="text-[11px] font-bold text-white leading-tight">{dayNum}</span>
+                <span className={`text-[9px] sm:text-[11px] font-bold font-mono leading-tight whitespace-nowrap overflow-hidden text-ellipsis ${textColor}`}>
                   {displayVal}
                 </span>
               </motion.div>

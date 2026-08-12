@@ -51,7 +51,7 @@ public class CategoryGuessService {
         if (apiKey != null && !apiKey.trim().isEmpty()) {
             try {
                 String promptText = String.format(
-                    "Phân loại chi phí có tên '%s' vào ĐÚNG 1 trong các danh mục sau: Food, Shopping, Transport, Health, Services, Entertainment. Trả về đúng 1 từ tiếng Anh tương ứng, không giải thích.",
+                    "Phân loại chi phí có tên '%s' vào ĐÚNG 1 trong các danh mục sau: Food, Drinks, Groceries, Shopping, Fuel, Housing, Entertainment, Salary, Bank, Investment, Others. Trả về đúng 1 từ tiếng Anh tương ứng, không giải thích.",
                     title.trim()
                 );
                 String apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
@@ -95,18 +95,26 @@ public class CategoryGuessService {
 
         // Fallback nếu không gọi được AI hoặc AI lỗi: Dựa vào từ khoá tiếng Việt cơ bản để phân loại offline
         if (guessedCategory.equalsIgnoreCase("Others")) {
-            if (keyword.contains("ăn") || keyword.contains("uống") || keyword.contains("cơm") || keyword.contains("phở") || keyword.contains("bánh") || keyword.contains("trà") || keyword.contains("food") || keyword.contains("cf") || keyword.contains("cafe")) {
+            if (keyword.contains("uống") || keyword.contains("trà") || keyword.contains("cf") || keyword.contains("cafe") || keyword.contains("coffee") || keyword.contains("boba")) {
+                guessedCategory = "Drinks";
+            } else if (keyword.contains("xăng") || keyword.contains("gas") || keyword.contains("oil") || keyword.contains("nhiên liệu") || keyword.contains("xe") || keyword.contains("bus") || keyword.contains("taxi") || keyword.contains("grab")) {
+                guessedCategory = "Fuel";
+            } else if (keyword.contains("ăn") || keyword.contains("cơm") || keyword.contains("phở") || keyword.contains("bánh") || keyword.contains("food") || keyword.contains("nhà hàng")) {
                 guessedCategory = "Food";
-            } else if (keyword.contains("xe") || keyword.contains("bus") || keyword.contains("taxi") || keyword.contains("grab") || keyword.contains("xăng") || keyword.contains("gas") || keyword.contains("oil")) {
-                guessedCategory = "Transport";
+            } else if (keyword.contains("chợ") || keyword.contains("siêu thị") || keyword.contains("tạp hóa") || keyword.contains("mart") || keyword.contains("vinmart")) {
+                guessedCategory = "Groceries";
             } else if (keyword.contains("mua") || keyword.contains("áo") || keyword.contains("quần") || keyword.contains("shopee") || keyword.contains("lazada") || keyword.contains("tiki")) {
                 guessedCategory = "Shopping";
-            } else if (keyword.contains("khám") || keyword.contains("thuốc") || keyword.contains("viện") || keyword.contains("sức khoẻ") || keyword.contains("med") || keyword.contains("doctor")) {
-                guessedCategory = "Health";
+            } else if (keyword.contains("nhà") || keyword.contains("phòng") || keyword.contains("điện") || keyword.contains("nước") || keyword.contains("net") || keyword.contains("wifi")) {
+                guessedCategory = "Housing";
+            } else if (keyword.contains("lương") || keyword.contains("thu nhập") || keyword.contains("salary") || keyword.contains("payday")) {
+                guessedCategory = "Salary";
+            } else if (keyword.contains("ngân hàng") || keyword.contains("bank") || keyword.contains("rút tiền") || keyword.contains("nạp tiền")) {
+                guessedCategory = "Bank";
             } else if (keyword.contains("chơi") || keyword.contains("game") || keyword.contains("phim") || keyword.contains("netflix") || keyword.contains("movie") || keyword.contains("vé")) {
                 guessedCategory = "Entertainment";
             } else {
-                guessedCategory = "Services";
+                guessedCategory = "Others";
             }
         }
 

@@ -1,5 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+export interface OcrItem {
+  name: string;
+  price: number;
+}
+
+export interface OcrRequestBody {
+  imageBase64?: string;
+  mimeType?: string;
+  apiKey?: string;
+}
+
 function getCleanKey(key?: string): string {
   if (!key) return "";
   const trimmed = String(key).trim();
@@ -7,7 +18,7 @@ function getCleanKey(key?: string): string {
   return trimmed;
 }
 
-function parsePriceHelper(rawPrice: any): number {
+function parsePriceHelper(rawPrice: unknown): number {
   if (typeof rawPrice === "number" && !isNaN(rawPrice) && isFinite(rawPrice)) {
     return Math.abs(rawPrice);
   }
@@ -44,6 +55,54 @@ function parsePriceHelper(rawPrice: any): number {
   return parseFloat(cleanVnd) || 0;
 }
 
+const PROMPT_TEXT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.
+
+YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):
+1. Bắt buộc lấy đúng con số ở cột "Thành tiền" (Total Amount = Số lượng x Đơn giá).
+2. TUYỆT ĐỐI KHÔNG lấy ở cột "Đơn giá" (Unit Price) hay cột "Số lượng".
+3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì "9.000", 56000 thay vì "56.000").
+4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường "price". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.
+
+Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:
+[
+  {
+    "name": "Tiger nâu",
+    "price": 56000
+  },
+  {
+    "name": "Bánh tráng",
+    "price": 9000
+  }
+]
+Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
+
+function extractJsonItems(cleanText: string): OcrItem[] {
+  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown }> = [];
+  const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
+  const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+  if (objMatch) {
+    const parsedObj = JSON.parse(objMatch[0]);
+    if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+  } else if (arrayMatch) {
+    itemsJson = JSON.parse(arrayMatch[0]);
+  } else {
+    const directParse = JSON.parse(cleanText);
+    itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+  }
+
+  if (Array.isArray(itemsJson) && itemsJson.length > 0) {
+    return itemsJson.map((it) => {
+      const name = String(it.name || it.item || it.description || "Món ăn").trim();
+      const rawPrice = it.price || it.amount || it.total || 0;
+      const price = parsePriceHelper(rawPrice);
+      return { name, price };
+    });
+  }
+
+  return [];
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers for safe response handling
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -63,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { imageBase64, mimeType = "image/jpeg", apiKey = "" } = req.body || {};
+    const { imageBase64, mimeType = "image/jpeg", apiKey = "" } = (req.body || {}) as OcrRequestBody;
 
     if (!imageBase64) {
       return res.status(400).json({ error: "Missing imageBase64 in payload" });
@@ -76,7 +135,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userKey = getCleanKey(apiKey);
     const isGroqKey = userKey.startsWith("gsk_");
-    const defaultOpenRouterKey = atob("c2stb3ItdjEtNzM0NjY1OWMwMmM1ZDY3Y2M1ZDJkNGNhYmEyNDViNTQxZmU0NDNmMzM1NTJlNjA2NjYwOGZiNGE4ZjY3N2U1NA==").trim();
 
     const rawEnvGroq = getCleanKey(process.env.GROQ_API_KEY) || getCleanKey(process.env.VITE_GROQ_KEY);
     const groqKey = isGroqKey ? userKey : (rawEnvGroq.startsWith("gsk_") ? rawEnvGroq : "");
@@ -85,11 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const validEnvOpenRouter = rawEnvOpenRouter.startsWith("sk-") ? rawEnvOpenRouter : "";
     const openRouterKey = (userKey.startsWith("sk-or-v1-") || userKey.startsWith("sk-"))
       ? userKey
-      : (validEnvOpenRouter || defaultOpenRouterKey);
-
-    let parsedItems: { name: string; price: number }[] = [];
-
-    const promptText = "Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.\n\nYÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):\n1. Bắt buộc lấy đúng con số ở cột \"Thành tiền\" (Total Amount = Số lượng x Đơn giá).\n2. TUYỆT ĐỐI KHÔNG lấy ở cột \"Đơn giá\" (Unit Price) hay cột \"Số lượng\".\n3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì \"9.000\", 56000 thay vì \"56.000\").\n4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường \"price\". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.\n\nTuyệt đối KHÔNG trả về markdown (không dùng ```json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:\n[\n  {\n    \"name\": \"Tiger nâu\",\n    \"price\": 56000\n  },\n  {\n    \"name\": \"Bánh tráng\",\n    \"price\": 9000\n  }\n]\nBỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.";
+      : validEnvOpenRouter;
 
     // 1. Try Groq API first if Groq key exists
     if (groqKey && groqKey.startsWith("gsk_")) {
@@ -104,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             model: "llama-3.2-11b-vision-preview",
             max_tokens: 1000,
             messages: [
-              { role: "system", content: promptText },
+              { role: "system", content: PROMPT_TEXT },
               {
                 role: "user",
                 content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
@@ -122,28 +176,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .replace(/```/g, "")
             .trim();
 
-          let itemsJson: any[] = [];
-          const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
-          const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-
-          if (objMatch) {
-            const parsedObj = JSON.parse(objMatch[0]);
-            if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
-          } else if (arrayMatch) {
-            itemsJson = JSON.parse(arrayMatch[0]);
-          } else {
-            const directParse = JSON.parse(cleanText);
-            itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
-          }
-
-          if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-            parsedItems = itemsJson.map((it: any) => {
-              const name = String(it.name || it.item || it.description || "Món ăn").trim();
-              const rawPrice = it.price || it.amount || it.total || 0;
-              const price = parsePriceHelper(rawPrice);
-              return { name, price };
-            });
-
+          const parsedItems = extractJsonItems(cleanText);
+          if (parsedItems.length > 0) {
             return res.status(200).json(parsedItems);
           }
         }
@@ -152,66 +186,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 2. OpenRouter Gemini 2.5 Flash Fallback (max_tokens: 1000)
-    const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openRouterKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        max_tokens: 1000,
-        messages: [
-          { role: "system", content: promptText },
-          {
-            role: "user",
-            content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
-          },
-        ],
-      }),
-    });
+    // 2. OpenRouter Gemini 2.5 Flash Fallback if OpenRouter Key exists
+    if (openRouterKey) {
+      const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openRouterKey}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 1000,
+          messages: [
+            { role: "system", content: PROMPT_TEXT },
+            {
+              role: "user",
+              content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
+            },
+          ],
+        }),
+      });
 
-    if (openRouterRes.ok) {
-      const result = await openRouterRes.json();
-      const rawContent = result.choices?.[0]?.message?.content || "";
-      const cleanText = rawContent
-        .replace(/<think>[\s\S]*?<\/think>/gi, "")
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
+      if (openRouterRes.ok) {
+        const result = await openRouterRes.json();
+        const rawContent = result.choices?.[0]?.message?.content || "";
+        const cleanText = rawContent
+          .replace(/<think>[\s\S]*?<\/think>/gi, "")
+          .replace(/```json/g, "")
+          .replace(/```/g, "")
+          .trim();
 
-      let itemsJson: any[] = [];
-      const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
-      const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-
-      if (objMatch) {
-        const parsedObj = JSON.parse(objMatch[0]);
-        if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
-      } else if (arrayMatch) {
-        itemsJson = JSON.parse(arrayMatch[0]);
+        const parsedItems = extractJsonItems(cleanText);
+        if (parsedItems.length > 0) {
+          return res.status(200).json(parsedItems);
+        }
       } else {
-        const directParse = JSON.parse(cleanText);
-        itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
-      }
-
-      if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-        parsedItems = itemsJson.map((it: any) => {
-          const name = String(it.name || it.item || it.description || "Món ăn").trim();
-          const rawPrice = it.price || it.amount || it.total || 0;
-          const price = parsePriceHelper(rawPrice);
-          return { name, price };
-        });
-
-        return res.status(200).json(parsedItems);
+        const errText = await openRouterRes.text();
+        console.error("OpenRouter API error response:", errText);
+        return res.status(500).json({ error: "Failed to parse receipt from AI models", details: errText });
       }
     }
 
-    const errText = await openRouterRes.text();
-    console.error("OpenRouter API error response:", errText);
-    return res.status(500).json({ error: "Failed to parse receipt from AI models", details: errText });
-  } catch (error: any) {
+    return res.status(400).json({ error: "No valid AI API key provided for OCR service." });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
     console.error("Vercel OCR serverless error:", error);
-    return res.status(500).json({ error: error?.message || "Internal server error" });
+    return res.status(500).json({ error: errorMessage });
   }
 }

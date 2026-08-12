@@ -20,12 +20,12 @@ export interface SavedBill {
 }
 
 export interface TransactionRecord {
-  id: string;
+  id?: string | number;
   date: string;
   description: string;
   amount: number;
   isLent: boolean;
-  isSettled: boolean;
+  isSettled?: boolean;
 }
 
 export interface FriendBalanceItem {
@@ -35,7 +35,7 @@ export interface FriendBalanceItem {
   history: TransactionRecord[];
 }
 
-import { Transaction } from "./App";
+import { Transaction } from "../../App";
 
 export default function SplitScreen({
   userName,

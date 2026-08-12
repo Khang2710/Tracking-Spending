@@ -8,6 +8,7 @@ import { NudgeButton } from "../../components/common/NudgeButton";
 import { useCurrency } from "../../context/CurrencyContext";
 
 interface TransactionRecord {
+  id?: string | number;
   date: string;
   description: string;
   amount: number;
@@ -352,7 +353,7 @@ function DebtDetailModal({
                         ) : (
                           <motion.button
                             type="button"
-                            onClick={() => onSettleTransaction(friend.name, record.id)}
+                            onClick={() => onSettleTransaction(friend.name, String(record.id || ""))}
                             whileTap={{ scale: 0.98 }}
                             className="text-[10px] text-gold font-bold hover:underline cursor-pointer bg-transparent border-0 p-0"
                           >
