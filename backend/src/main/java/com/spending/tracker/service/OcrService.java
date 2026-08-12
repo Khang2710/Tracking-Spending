@@ -69,7 +69,7 @@ public class OcrService {
             modelName = "google/gemini-2.5-flash";
         } else if (key.startsWith("gsk_")) {
             apiUrl = "https://api.groq.com/openai/v1/chat/completions";
-            modelName = "llama-3.2-11b-vision-preview";
+            modelName = "qwen/qwen3.6-27b";
         }
 
         try {
@@ -92,16 +92,20 @@ public class OcrService {
                     "]\n" +
                     "Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.");
 
+            Map<String, Object> textContentItem = new HashMap<>();
+            textContentItem.put("type", "text");
+            textContentItem.put("text", "Trích xuất danh sách món ăn và giá tiền từ hoá đơn này.");
+
             Map<String, Object> imageUrlObj = new HashMap<>();
             imageUrlObj.put("url", formattedBase64);
 
-            Map<String, Object> userContentItem = new HashMap<>();
-            userContentItem.put("type", "image_url");
-            userContentItem.put("image_url", imageUrlObj);
+            Map<String, Object> imageContentItem = new HashMap<>();
+            imageContentItem.put("type", "image_url");
+            imageContentItem.put("image_url", imageUrlObj);
 
             Map<String, Object> userMessage = new HashMap<>();
             userMessage.put("role", "user");
-            userMessage.put("content", Collections.singletonList(userContentItem));
+            userMessage.put("content", Arrays.asList(textContentItem, imageContentItem));
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);
