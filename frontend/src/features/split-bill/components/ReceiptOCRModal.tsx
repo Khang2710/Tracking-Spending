@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Sparkles, Camera, Receipt, Loader2, Key, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, Camera, Receipt, Loader2, Key, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { C, Card } from "../../../App";
+import { C } from "../../../App";
 import { compressImage } from "../../../utils/imageCompressor";
 import { parseRawReceiptText } from "../../../utils/ocrParser";
 import { processReceiptImage, ExtractedItem } from "../../../services/ocrService";
@@ -13,7 +13,8 @@ interface ReceiptOCRModalProps {
 
 export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onItemsExtracted }) => {
   const { t } = useTranslation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const [rawReceipt, setRawReceipt] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -136,7 +137,8 @@ export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onI
       setIsExtracting(false);
       setOcrLoadingText("");
       setOcrProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
     }
   };
 
@@ -178,19 +180,42 @@ export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onI
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {/* Hidden Input for Camera Capture */}
             <input
               type="file"
               accept="image/*"
               capture="environment"
-              ref={fileInputRef}
+              ref={cameraInputRef}
               onChange={handleFileCapture}
               className="hidden"
             />
 
+            {/* Hidden Input for Gallery Upload */}
+            <input
+              type="file"
+              accept="image/*"
+              ref={galleryInputRef}
+              onChange={handleFileCapture}
+              className="hidden"
+            />
+
+            {/* Gallery Upload Button (iOS Camera Style Overlay) */}
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={isExtracting}
+              className="px-3 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:bg-white/15 border border-white/10 text-xs text-white bg-white/5 backdrop-blur-md shadow-md disabled:opacity-40"
+              title="Tải ảnh từ thư viện"
+            >
+              <ImageIcon size={15} className="text-zinc-200" />
+              <span>Thư viện</span>
+            </button>
+
+            {/* Main Camera Button */}
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
               disabled={isExtracting}
               className="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 cursor-pointer transition-all hover:brightness-110 border-0 text-xs text-[#0F0F10] shadow-md disabled:opacity-40"
               style={{ background: C.gold }}
@@ -199,6 +224,7 @@ export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onI
               <span>{t("split.cameraOcrBtn")}</span>
             </button>
 
+            {/* Toggle Paste Text Area */}
             <button
               type="button"
               onClick={() => setShowPasteArea((prev) => !prev)}

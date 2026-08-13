@@ -22,6 +22,12 @@ guidelines/
 CLAUDE.md
 skills-lock.json
 brain/
+.claude/
+.agents/
+.skills/    
+.commands/
+.rules/
+
 
 # Non-essential root files
 ATTRIBUTIONS.md
