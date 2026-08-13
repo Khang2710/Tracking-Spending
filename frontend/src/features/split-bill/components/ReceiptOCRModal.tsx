@@ -180,37 +180,15 @@ export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onI
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            {/* Hidden Input for Camera Capture */}
+          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+            {/* Native File Input (Triggers iOS Action Sheet: Photo Library / Take Photo / Choose File) */}
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               ref={cameraInputRef}
               onChange={handleFileCapture}
               className="hidden"
             />
-
-            {/* Hidden Input for Gallery Upload */}
-            <input
-              type="file"
-              accept="image/*"
-              ref={galleryInputRef}
-              onChange={handleFileCapture}
-              className="hidden"
-            />
-
-            {/* Gallery Upload Button (iOS Camera Style Overlay) */}
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={isExtracting}
-              className="px-3 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:bg-white/15 border border-white/10 text-xs text-white bg-white/5 backdrop-blur-md shadow-md disabled:opacity-40"
-              title="Tải ảnh từ thư viện"
-            >
-              <ImageIcon size={15} className="text-zinc-200" />
-              <span>Thư viện</span>
-            </button>
 
             {/* Main Camera Button */}
             <button

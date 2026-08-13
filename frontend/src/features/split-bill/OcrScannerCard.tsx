@@ -13,8 +13,7 @@ interface OcrScannerCardProps {
 
 export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProps) {
   const { t } = useTranslation();
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
@@ -29,8 +28,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
     setIsExtracting(false);
     setOcrProgress(0);
     setOcrLoadingText("");
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,8 +109,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
         setIsExtracting(false);
         setOcrProgress(0);
         setOcrLoadingText("");
-        if (cameraInputRef.current) cameraInputRef.current.value = "";
-        if (galleryInputRef.current) galleryInputRef.current.value = "";
+        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     }
   };
@@ -126,19 +123,9 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
           borderColor: `${C.gold}44`,
         }}
       >
-        {/* Hidden Camera Input */}
+        {/* Native File Input (Triggers iOS Action Sheet: Photo Library / Take Photo / Choose File) */}
         <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-
-        {/* Hidden Gallery Input */}
-        <input
-          ref={galleryInputRef}
+          ref={fileInputRef}
           type="file"
           accept="image/*"
           onChange={handleFileChange}
@@ -163,33 +150,17 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Gallery Upload Button (iOS Camera Style Overlay Icon) */}
-            <motion.button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={isExtracting}
-              whileTap={{ scale: 0.95 }}
-              className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-white/15 bg-white/10 hover:bg-white/20 text-white backdrop-blur-md shadow-md disabled:opacity-50 font-sans"
-              title="Tải ảnh từ thư viện"
-            >
-              <ImageIcon size={15} className="text-zinc-200" />
-              <span className="hidden sm:inline">Thư viện</span>
-            </motion.button>
-
-            {/* Main Camera Button */}
-            <motion.button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={isExtracting}
-              whileTap={{ scale: 0.95 }}
-              className="px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 font-sans border-0 shadow-lg"
-              style={{ background: C.gold, color: C.bg }}
-            >
-              <Camera size={15} />
-              <span>{t("split.cameraOcrBtn", "Snap Receipt")}</span>
-            </motion.button>
-          </div>
+          <motion.button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isExtracting}
+            whileTap={{ scale: 0.95 }}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 font-sans border-0 shadow-lg shrink-0"
+            style={{ background: C.gold, color: C.bg }}
+          >
+            <Camera size={15} />
+            <span>{t("split.cameraOcrBtn", "Quét hóa đơn")}</span>
+          </motion.button>
         </div>
       </div>
 
