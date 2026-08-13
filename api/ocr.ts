@@ -161,7 +161,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               { role: "system", content: PROMPT_TEXT },
               {
                 role: "user",
-                content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
+                content: [
+                  { type: "text", text: "Trích xuất danh sách món ăn và giá tiền từ hoá đơn này." },
+                  { type: "image_url", image_url: { url: formattedBase64 } },
+                ],
               },
             ],
           }),
@@ -180,6 +183,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (parsedItems.length > 0) {
             return res.status(200).json(parsedItems);
           }
+        } else {
+          const errBody = await groqRes.text();
+          console.error("Groq API Non-200 Response:", groqRes.status, errBody);
         }
       } catch (groqErr) {
         console.warn("Groq serverless proxy failed, falling back to OpenRouter...", groqErr);
@@ -201,7 +207,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { role: "system", content: PROMPT_TEXT },
             {
               role: "user",
-              content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
+              content: [
+                { type: "text", text: "Trích xuất danh sách món ăn và giá tiền từ hoá đơn này." },
+                { type: "image_url", image_url: { url: formattedBase64 } },
+              ],
             },
           ],
         }),

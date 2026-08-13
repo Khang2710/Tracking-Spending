@@ -95,6 +95,8 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
 
         if (!signal.aborted && items && items.length > 0) {
           onItemsParsed(items);
+        } else if (!signal.aborted) {
+          alert("AI chưa trích xuất được món ăn nào từ ảnh bạn đã chọn. Vui lòng thử lại với ảnh hóa đơn rõ nét hơn.");
         }
       }
     } catch (err: any) {
@@ -102,6 +104,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
         console.log("OCR scan cancelled by user.");
       } else {
         console.error("OCR Scan Error:", err);
+        alert("Đã xảy ra lỗi khi phân tích ảnh hóa đơn. Vui lòng thử lại.");
       }
     } finally {
       if (!signal.aborted) {
