@@ -125,10 +125,13 @@ export const ReceiptOCRModal: React.FC<ReceiptOCRModalProps> = React.memo(({ onI
         const extracted = await processReceiptImage(base64Data, userKey, t("common.unnamed"));
         if (extracted.length > 0) {
           onItemsExtracted(extracted);
+        } else {
+          alert("AI chưa trích xuất được món ăn nào từ ảnh chụp. Bạn vui lòng chụp vuông góc, rõ nét hơn hoặc dùng tính năng Dán văn bản.");
         }
       }
     } catch (err) {
       console.error("Image processing error:", err);
+      alert("Đã xảy ra lỗi trong quá trình đọc ảnh hoá đơn. Vui lòng thử lại.");
     } finally {
       setIsExtracting(false);
       setOcrLoadingText("");

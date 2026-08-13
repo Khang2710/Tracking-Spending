@@ -3,6 +3,8 @@ export interface OcrParsedItem {
   price: number;
 }
 
+export type ExtractedItem = OcrParsedItem;
+
 export interface ProcessReceiptOptions {
   pureBase64: string;
   mimeType: string;
@@ -68,7 +70,7 @@ export function parseRawReceiptText(rawReceipt: string, defaultName = "Món ăn"
 async function fetchWithTimeout(
   resource: string,
   options: RequestInit = {},
-  timeoutMs = 10000,
+  timeoutMs = 25000,
   externalSignal?: AbortSignal
 ): Promise<Response> {
   const controller = new AbortController();
@@ -125,8 +127,12 @@ function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem
   } else if (arrayMatch) {
     itemsJson = JSON.parse(arrayMatch[0]);
   } else {
-    const directParse = JSON.parse(cleanText);
-    itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+    try {
+      const directParse = JSON.parse(cleanText);
+      itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+    } catch (e) {
+      console.warn("Direct JSON parse failed:", e);
+    }
   }
 
   if (Array.isArray(itemsJson) && itemsJson.length > 0) {
@@ -174,7 +180,7 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
           apiKey: userApiKey.trim(),
         }),
       },
-      12000,
+      25000,
       signal
     );
 
@@ -190,7 +196,7 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
   }
 
   // Tier 2: Direct Client Call if Key Available
-  const key = userApiKey.trim() || (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string);
+  const key = userApiKey.trim() || (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || "";
   if (parsedItems.length === 0 && key) {
     onProgress?.(55, "Direct AI Fallback");
     const isOpenRouter = key.startsWith("sk-or-v1-") || key.startsWith("sk-");
@@ -204,7 +210,7 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
     const modelName = isOpenRouter
       ? "google/gemini-2.5-flash"
       : isGroq
-      ? "llama-3.2-11b-vision-preview"
+      ? "qwen/qwen3.6-27b"
       : "gpt-4o";
 
     try {
@@ -223,12 +229,15 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
               { role: "system", content: OCR_PROMPT },
               {
                 role: "user",
-                content: [{ type: "image_url", image_url: { url: formattedBase64 } }],
+                content: [
+                  { type: "text", text: "Trích xuất danh sách món ăn và giá tiền từ hoá đơn này." },
+                  { type: "image_url", image_url: { url: formattedBase64 } }
+                ],
               },
             ],
           }),
         },
-        10000,
+        20000,
         signal
       );
 
@@ -264,7 +273,7 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
         },
-        10000,
+        15000,
         signal
       );
 
@@ -282,4 +291,26 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
 
   onProgress?.(100, "Finished");
   return parsedItems;
+}
+
+export async function processReceiptImage(
+  base64Data: string,
+  userApiKey?: string,
+  fallbackName = "Món ăn"
+): Promise<OcrParsedItem[]> {
+  const mimeType =
+    base64Data.substring(base64Data.indexOf(":") + 1, base64Data.indexOf(";")) ||
+    "image/jpeg";
+  const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+  const formattedBase64 = base64Data.startsWith("data:")
+    ? base64Data
+    : `data:${mimeType};base64,${pureBase64}`;
+
+  return processReceiptOcr({
+    pureBase64,
+    mimeType,
+    formattedBase64,
+    userApiKey,
+    defaultNameLabel: fallbackName,
+  });
 }
