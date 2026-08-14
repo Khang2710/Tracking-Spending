@@ -1,6 +1,7 @@
 export interface OcrParsedItem {
   name: string;
   price: number;
+  currency?: "VND" | "USD" | string;
 }
 
 export type ExtractedItem = OcrParsedItem;
@@ -22,8 +23,22 @@ export function parsePriceHelper(rawPrice: unknown): number {
   if (!rawPrice) return 0;
 
   const strP = String(rawPrice).trim();
+
+  // Pure integer string like "56000" or "13"
   if (/^\d+$/.test(strP)) {
     return parseFloat(strP) || 0;
+  }
+
+  // Pure decimal string like "13.00", "3.50", "34.61"
+  if (/^\d+\.\d{1,2}$/.test(strP)) {
+    return parseFloat(strP) || 0;
+  }
+
+  // Check decimal currency pattern with 1 or 2 decimals (e.g. $13.00, 3.50, 123.45)
+  if (/\.\d{1,2}$/.test(strP) && !/\.\d{3}$/.test(strP)) {
+    const cleanStr = strP.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    const parsed = parseFloat(cleanStr);
+    if (!isNaN(parsed)) return parsed;
   }
 
   const thousandMatch = strP.match(/\b\d{1,3}(?:[.,]\d{3})+\b/);
@@ -97,27 +112,31 @@ async function fetchWithTimeout(
 
 const OCR_PROMPT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.
 
-YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):
-1. Bắt buộc lấy đúng con số ở cột "Thành tiền" (Total Amount = Số lượng x Đơn giá).
-2. TUYỆT ĐỐI KHÔNG lấy ở cột "Đơn giá" (Unit Price) hay cột "Số lượng".
-3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì "9.000", 56000 thay vì "56.000").
-4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường "price". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.
+YÊU CẦU BẮT BUỘC VỀ ĐƠN VỊ TIỀN TỆ & GIÁ TIỀN:
+1. XÁC ĐỊNH ĐƠN VỊ TIỀN TỆ ("currency"):
+   - Nếu là hóa đơn Đô la ($ / USD / cents / giá dạng 13.00, 3.50): gán "currency": "USD".
+   - Nếu là hóa đơn tiền Việt (₫ / VNĐ / đ / k / giá dạng 56.000, 90.000): gán "currency": "VND".
+2. Bắt buộc lấy đúng con số ở cột "Thành tiền" (Total Amount = Số lượng x Đơn giá).
+   - Nếu là USD: giữ số thực thuần túy (ví dụ: 13.00 -> 13, 3.50 -> 3.5).
+   - Nếu là VND: giữ số nguyên thuần túy (ví dụ: 56.000 -> 56000).
 
 Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:
 [
   {
-    "name": "Tiger nâu",
-    "price": 56000
+    "name": "JW Black",
+    "price": 13,
+    "currency": "USD"
   },
   {
     "name": "Bánh tráng",
-    "price": 9000
+    "price": 9000,
+    "currency": "VND"
   }
 ]
 Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem[] {
-  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown }> = [];
+  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
   const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
   const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
@@ -135,12 +154,20 @@ function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem
     }
   }
 
+  let detectedCurrency: "USD" | "VND" | undefined;
+  if (cleanText.includes('"USD"') || cleanText.includes("$") || cleanText.toLowerCase().includes("usd")) {
+    detectedCurrency = "USD";
+  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd")) {
+    detectedCurrency = "VND";
+  }
+
   if (Array.isArray(itemsJson) && itemsJson.length > 0) {
     return itemsJson.map((it) => {
       const name = String(it.name || it.item || it.description || defaultName).trim();
-      const rawPrice = it.price || it.amount || it.total || 0;
+      const rawPrice = it.price ?? it.amount ?? it.total ?? 0;
       const price = parsePriceHelper(rawPrice);
-      return { name, price };
+      const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
+      return { name, price, currency };
     });
   }
 

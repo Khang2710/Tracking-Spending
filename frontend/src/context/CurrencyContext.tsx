@@ -53,10 +53,10 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const formatted = finalAmount.toLocaleString("vi-VN");
       return isNegative ? `-${formatted} ₫` : `${formatted} ₫`;
     } else {
-      // USD mode: Convert base VND amount to USD unless forceRaw is specified
-      const finalAmount = forceRaw ? absVal : absVal / exchangeRate;
+      // USD mode: If amount is already a raw USD value (< 1000) or forceRaw is true, format directly. Otherwise convert VND -> USD.
+      const finalAmount = (forceRaw || absVal < 1000) ? absVal : absVal / exchangeRate;
       const formatted = finalAmount.toLocaleString("en-US", {
-        minimumFractionDigits: 0,
+        minimumFractionDigits: finalAmount % 1 === 0 ? 0 : 2,
         maximumFractionDigits: 2,
       });
       return isNegative ? `-$${formatted}` : `$${formatted}`;

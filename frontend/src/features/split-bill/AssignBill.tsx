@@ -38,7 +38,7 @@ export default function AssignBill({
   onAddTransaction,
 }: AssignBillProps) {
   const { t } = useTranslation();
-  const { formatCurrency, currency } = useCurrency();
+  const { formatCurrency, currency, setCurrency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(0);
@@ -63,6 +63,17 @@ export default function AssignBill({
       consumers: [],
     }));
     setItems((prev) => [...prev, ...newSplitItems]);
+
+    // Dynamic Currency Switching: Always update currency state to match the scanned receipt
+    const isUsdReceipt = parsedItems.some(
+      (it) => it.currency === "USD" || (it.price > 0 && it.price < 500 && it.price % 1 !== 0)
+    ) || (parsedItems.length > 0 && parsedItems.every((it) => it.price > 0 && it.price < 500));
+
+    if (isUsdReceipt) {
+      setCurrency("USD");
+    } else {
+      setCurrency("VND");
+    }
   };
 
   const handleAddItem = (e: React.FormEvent) => {

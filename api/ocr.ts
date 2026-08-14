@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 export interface OcrItem {
   name: string;
   price: number;
+  currency?: string;
 }
 
 export interface OcrRequestBody {
@@ -25,8 +26,22 @@ function parsePriceHelper(rawPrice: unknown): number {
   if (!rawPrice) return 0;
 
   const strP = String(rawPrice).trim();
+
+  // Pure integer string like "56000" or "13"
   if (/^\d+$/.test(strP)) {
     return parseFloat(strP) || 0;
+  }
+
+  // Pure decimal string like "13.00", "3.50", "34.61"
+  if (/^\d+\.\d{1,2}$/.test(strP)) {
+    return parseFloat(strP) || 0;
+  }
+
+  // Check decimal currency pattern with 1 or 2 decimals (e.g. $13.00, 3.50, 123.45)
+  if (/\.\d{1,2}$/.test(strP) && !/\.\d{3}$/.test(strP)) {
+    const cleanStr = strP.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    const parsed = parseFloat(cleanStr);
+    if (!isNaN(parsed)) return parsed;
   }
 
   // 1. Look for formatted thousand numbers (e.g. 9.000, 56.000, 3.565.000)
@@ -42,7 +57,6 @@ function parsePriceHelper(rawPrice: unknown): number {
 
   let numStr = numMatch[0];
 
-  // Handle standard decimal formats like 1,234.56 or 15.5
   if (/\.\d{1,2}$/.test(numStr)) {
     numStr = numStr.replace(/,/g, "");
     return parseFloat(numStr) || 0;
@@ -55,29 +69,33 @@ function parsePriceHelper(rawPrice: unknown): number {
   return parseFloat(cleanVnd) || 0;
 }
 
-const PROMPT_TEXT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn và giá tiền tương ứng.
+const PROMPT_TEXT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn quốc tế (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn, giá tiền và đơn vị tiền tệ tương ứng.
 
-YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN (PRICE):
-1. Bắt buộc lấy đúng con số ở cột "Thành tiền" (Total Amount = Số lượng x Đơn giá).
-2. TUYỆT ĐỐI KHÔNG lấy ở cột "Đơn giá" (Unit Price) hay cột "Số lượng".
-3. Loại bỏ hoàn toàn mọi dấu chấm, dấu phẩy phân cách hàng nghìn. Chỉ trả về số nguyên thuần túy kiểu Number (ví dụ: 9000 thay vì "9.000", 56000 thay vì "56.000").
-4. CHỈ TRẢ VỀ DUY NHẤT CON SỐ NGUYÊN CỦA THÀNH TIỀN trong trường "price". TUYỆT ĐỐI KHÔNG ghi thêm ghi chú, phép tính, số lượng hay chữ viết khác.
+YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN VÀ ĐỊNH DẠNG:
+1. Lấy đúng con số ở cột thành tiền của món ăn.
+2. Xử lý linh hoạt định dạng số theo hóa đơn: 
+   - Nếu là tiền Việt (VND, đ): Trả về số nguyên (ví dụ: 56000).
+   - Nếu là ngoại tệ có số thập phân (USD, $, EUR...): Trả về kiểu số (Number) giữ nguyên phần thập phân nếu có (ví dụ: 10.50 thay vì 1050).
+3. TUYỆT ĐỐI KHÔNG ghi thêm ký hiệu tiền tệ, chữ viết hay giải thích vào trường "price".
+4. Thêm trường "currency" để ghi nhận đơn vị tiền tệ xuất hiện trên hóa đơn (ví dụ: "VND", "USD", "$").
 
 Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:
 [
   {
     "name": "Tiger nâu",
-    "price": 56000
+    "price": 56000,
+    "currency": "VND"
   },
   {
-    "name": "Bánh tráng",
-    "price": 9000
+    "name": "Coke",
+    "price": 3.50,
+    "currency": "USD"
   }
 ]
 Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string): OcrItem[] {
-  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown }> = [];
+  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
   const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
   const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
@@ -87,16 +105,26 @@ function extractJsonItems(cleanText: string): OcrItem[] {
   } else if (arrayMatch) {
     itemsJson = JSON.parse(arrayMatch[0]);
   } else {
-    const directParse = JSON.parse(cleanText);
-    itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+    try {
+      const directParse = JSON.parse(cleanText);
+      itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+    } catch (e) {}
+  }
+
+  let detectedCurrency: "USD" | "VND" | undefined;
+  if (cleanText.includes('"USD"') || cleanText.includes("$") || cleanText.toLowerCase().includes("usd")) {
+    detectedCurrency = "USD";
+  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd")) {
+    detectedCurrency = "VND";
   }
 
   if (Array.isArray(itemsJson) && itemsJson.length > 0) {
     return itemsJson.map((it) => {
       const name = String(it.name || it.item || it.description || "Món ăn").trim();
-      const rawPrice = it.price || it.amount || it.total || 0;
+      const rawPrice = it.price ?? it.amount ?? it.total ?? 0;
       const price = parsePriceHelper(rawPrice);
-      return { name, price };
+      const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
+      return { name, price, currency };
     });
   }
 
