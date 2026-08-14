@@ -136,7 +136,8 @@ Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG gi�
 Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem[] {
-  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
+  let itemsJson: Array<any> = [];
+
   try {
     const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
     const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
@@ -144,20 +145,23 @@ function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem
     if (objMatch) {
       const parsedObj = JSON.parse(objMatch[0]);
       if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+      else if (Array.isArray(parsedObj.danh_sach)) itemsJson = parsedObj.danh_sach;
+      else if (Array.isArray(parsedObj.mon_an)) itemsJson = parsedObj.mon_an;
     } else if (arrayMatch) {
       itemsJson = JSON.parse(arrayMatch[0]);
     } else {
       const directParse = JSON.parse(cleanText);
-      itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+      if (Array.isArray(directParse)) itemsJson = directParse;
+      else itemsJson = directParse.items || directParse.danh_sach || directParse.mon_an || [];
     }
   } catch (e) {
     // Regex fallback for truncated or partially malformed JSON
-    const objectMatches = cleanText.match(/\{\s*"(?:name|item)"[\s\S]*?\}/gi);
+    const objectMatches = cleanText.match(/\{\s*"(?:name|item|ten|ten_mon|mon)"[\s\S]*?\}/gi);
     if (objectMatches) {
       objectMatches.forEach((objStr) => {
         try {
           const item = JSON.parse(objStr);
-          if (item && (item.name || item.price)) itemsJson.push(item);
+          if (item) itemsJson.push(item);
         } catch (err) {}
       });
     }
@@ -166,18 +170,27 @@ function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem
   let detectedCurrency: "USD" | "VND" | undefined;
   if (cleanText.includes('"USD"') || cleanText.includes("$") || cleanText.toLowerCase().includes("usd")) {
     detectedCurrency = "USD";
-  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd")) {
+  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd") || cleanText.includes("VNĐ")) {
     detectedCurrency = "VND";
   }
 
   if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-    return itemsJson.map((it) => {
-      const name = String(it.name || it.item || it.description || defaultName).trim();
-      const rawPrice = it.price ?? it.amount ?? it.total ?? 0;
+    const validItems: OcrParsedItem[] = [];
+    itemsJson.forEach((it) => {
+      if (!it || typeof it !== "object") return;
+      const name = String(
+        it.name || it.item || it.description || it.ten_mon || it.ten || it.mon || it.title || defaultName
+      ).trim();
+      const rawPrice =
+        it.price ?? it.amount ?? it.total ?? it.gia ?? it.gia_tien ?? it.thanh_tien ?? it.so_tien ?? it.don_gia ?? 0;
+
       const price = parsePriceHelper(rawPrice);
-      const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
-      return { name, price, currency };
+      if (name && price > 0) {
+        const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
+        validItems.push({ name, price, currency });
+      }
     });
+    return validItems;
   }
 
   return [];

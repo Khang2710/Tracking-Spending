@@ -69,33 +69,38 @@ function parsePriceHelper(rawPrice: unknown): number {
   return parseFloat(cleanVnd) || 0;
 }
 
-const PROMPT_TEXT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn quốc tế (Receipt OCR). Dựa vào hình ảnh hoá đơn này, hãy trích xuất toàn bộ các món ăn, giá tiền và đơn vị tiền tệ tương ứng.
+const PROMPT_TEXT = `Bạn là một chuyên gia AI đọc dữ liệu hoá đơn quốc tế (Receipt OCR). Dựa vào hình ảnh hoá đơn này (tiếng Việt hoặc tiếng Anh), hãy trích xuất toàn bộ các món ăn, giá tiền và đơn vị tiền tệ tương ứng.
 
-YÊU CẦU BẮT BUỘC VỀ GIÁ TIỀN VÀ ĐỊNH DẠNG:
-1. Lấy đúng con số ở cột thành tiền của món ăn.
-2. Xử lý linh hoạt định dạng số theo hóa đơn: 
-   - Nếu là tiền Việt (VND, đ): Trả về số nguyên (ví dụ: 56000).
-   - Nếu là ngoại tệ có số thập phân (USD, $, EUR...): Trả về kiểu số (Number) giữ nguyên phần thập phân nếu có (ví dụ: 10.50 thay vì 1050).
-3. TUYỆT ĐỐI KHÔNG ghi thêm ký hiệu tiền tệ, chữ viết hay giải thích vào trường "price".
-4. Thêm trường "currency" để ghi nhận đơn vị tiền tệ xuất hiện trên hóa đơn (ví dụ: "VND", "USD", "$").
+QUY TẮC BẮT BUỘC VỀ ĐỊNH DẠNG JSON & TỪ KHÓA (JSON KEYS):
+1. BẮT BUỘC DÙNG ĐÚNG 3 TỪ KHÓA TIẾNG ANH TRONG MỖI OBJECT: "name", "price", "currency".
+   TUYỆT ĐỐI KHÔNG DÙNG TỪ KHÓA TIẾNG VIỆT (KHÔNG dùng "ten_mon", "ten", "gia", "gia_tien", "thanh_tien").
 
-Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG giải thích hay thêm text nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:
+2. ĐƠN VỊ TIỀN TỆ ("currency"):
+   - "VND": Nếu là hóa đơn tiền Việt (₫, VNĐ, đ, k, hoặc số tiền dạng 56.000, 90.000).
+   - "USD": Nếu là hóa đơn tiền Đô la ($, USD, cents, hoặc số tiền dạng 13.00, 3.50).
+
+3. GIÁ TIỀN ("price"):
+   - Lấy đúng con số ở cột Thành tiền (Total Amount = Số lượng x Đơn giá).
+   - Nếu là VND: Trả về số nguyên thuần túy (ví dụ: 56.000 -> 56000, 90.000 -> 90000).
+   - Nếu là USD: Giữ nguyên số thực phần thập phân (ví dụ: 13.00 -> 13, 3.50 -> 3.5).
+
+Tuyệt đối KHÔNG trả về markdown (không dùng \`\`\`json), KHÔNG giải thích hay thêm văn bản nào khác. CHỈ trả về một mảng JSON theo format chuẩn xác sau:
 [
   {
-    "name": "Tiger nâu",
+    "name": "Cơm tấm sườn",
     "price": 56000,
     "currency": "VND"
   },
   {
-    "name": "Coke",
-    "price": 3.50,
+    "name": "JW Black",
+    "price": 13,
     "currency": "USD"
   }
 ]
 Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string): OcrItem[] {
-  let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
+  let itemsJson: Array<any> = [];
 
   try {
     const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
@@ -104,20 +109,23 @@ function extractJsonItems(cleanText: string): OcrItem[] {
     if (objMatch) {
       const parsedObj = JSON.parse(objMatch[0]);
       if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+      else if (Array.isArray(parsedObj.danh_sach)) itemsJson = parsedObj.danh_sach;
+      else if (Array.isArray(parsedObj.mon_an)) itemsJson = parsedObj.mon_an;
     } else if (arrayMatch) {
       itemsJson = JSON.parse(arrayMatch[0]);
     } else {
       const directParse = JSON.parse(cleanText);
-      itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
+      if (Array.isArray(directParse)) itemsJson = directParse;
+      else itemsJson = directParse.items || directParse.danh_sach || directParse.mon_an || [];
     }
   } catch (e) {
     // Regex fallback for truncated or partially malformed JSON
-    const objectMatches = cleanText.match(/\{\s*"(?:name|item)"[\s\S]*?\}/gi);
+    const objectMatches = cleanText.match(/\{\s*"(?:name|item|ten|ten_mon|mon)"[\s\S]*?\}/gi);
     if (objectMatches) {
       objectMatches.forEach((objStr) => {
         try {
           const item = JSON.parse(objStr);
-          if (item && (item.name || item.price)) itemsJson.push(item);
+          if (item) itemsJson.push(item);
         } catch (err) {}
       });
     }
@@ -126,18 +134,27 @@ function extractJsonItems(cleanText: string): OcrItem[] {
   let detectedCurrency: "USD" | "VND" | undefined;
   if (cleanText.includes('"USD"') || cleanText.includes("$") || cleanText.toLowerCase().includes("usd")) {
     detectedCurrency = "USD";
-  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd")) {
+  } else if (cleanText.includes('"VND"') || cleanText.includes("₫") || cleanText.toLowerCase().includes("vnd") || cleanText.includes("VNĐ")) {
     detectedCurrency = "VND";
   }
 
   if (Array.isArray(itemsJson) && itemsJson.length > 0) {
-    return itemsJson.map((it) => {
-      const name = String(it.name || it.item || it.description || "Món ăn").trim();
-      const rawPrice = it.price ?? it.amount ?? it.total ?? 0;
+    const validItems: OcrItem[] = [];
+    itemsJson.forEach((it) => {
+      if (!it || typeof it !== "object") return;
+      const name = String(
+        it.name || it.item || it.description || it.ten_mon || it.ten || it.mon || it.title || "Món ăn"
+      ).trim();
+      const rawPrice =
+        it.price ?? it.amount ?? it.total ?? it.gia ?? it.gia_tien ?? it.thanh_tien ?? it.so_tien ?? it.don_gia ?? 0;
+
       const price = parsePriceHelper(rawPrice);
-      const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
-      return { name, price, currency };
+      if (name && price > 0) {
+        const currency = it.currency || detectedCurrency || (price > 0 && price < 500 ? "USD" : "VND");
+        validItems.push({ name, price, currency });
+      }
     });
+    return validItems;
   }
 
   return [];
