@@ -43,6 +43,8 @@ export default function AssignBill({
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(0);
   const [tip, setTip] = useState<number>(0);
+  const [serviceCharge, setServiceCharge] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
 
   const [newFriendName, setNewFriendName] = useState("");
   const [apiKeyInput] = useState(() => (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
@@ -71,8 +73,23 @@ export default function AssignBill({
 
     if (isUsdReceipt) {
       setCurrency("USD");
+      // Auto-populate absolute Tax, Tip, Service Charge & Discount for USD receipts if extracted by AI
+      const extractedTax = parsedItems.find((it) => typeof it.tax === "number" && it.tax > 0)?.tax ?? 0;
+      const extractedTip = parsedItems.find((it) => typeof it.tip === "number" && it.tip > 0)?.tip ?? 0;
+      const extractedService = parsedItems.find((it) => typeof it.serviceCharge === "number" && it.serviceCharge > 0)?.serviceCharge ?? 0;
+      const extractedDiscount = parsedItems.find((it) => typeof it.discount === "number" && it.discount > 0)?.discount ?? 0;
+
+      setTaxPercent(extractedTax);
+      setTip(extractedTip);
+      setServiceCharge(extractedService);
+      setDiscount(extractedDiscount);
     } else {
       setCurrency("VND");
+      // Keep manual tax/tip/serviceCharge/discount for VND receipts (default to 0)
+      setTaxPercent(0);
+      setTip(0);
+      setServiceCharge(0);
+      setDiscount(0);
     }
   };
 
@@ -153,23 +170,39 @@ export default function AssignBill({
       }
     });
 
+    const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
+
+    // Tax is flat absolute dollar value in USD mode, percentage in VND mode
+    const calculatedTotalTax = currency === "USD" 
+      ? taxPercent 
+      : calculatedSubtotal * (taxPercent / 100);
+
     const tipShare = numPeople > 0 ? tip / numPeople : 0;
+    const serviceChargeShare = numPeople > 0 ? serviceCharge / numPeople : 0;
+
     const calculatedDebts = allParticipants.map((p) => {
       const assignedItemCost = itemShares[p] || 0;
       const personalItemCost = assignedItemCost + sharedAmountPerPerson;
-      const personalTax = personalItemCost * (taxPercent / 100);
-      const totalDue = personalItemCost + personalTax + tipShare;
+
+      const discountShare = currency === "USD" || discount > 0
+        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * discount : (numPeople > 0 ? discount / numPeople : 0))
+        : 0;
+
+      const personalTax = currency === "USD"
+        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * calculatedTotalTax : (numPeople > 0 ? calculatedTotalTax / numPeople : 0))
+        : personalItemCost * (taxPercent / 100);
+
+      const totalDue = Math.max(0, personalItemCost - discountShare + personalTax + tipShare + serviceChargeShare);
       return {
         name: p,
         itemCost: personalItemCost,
         tax: personalTax,
+        discountShare,
         total: Math.round(totalDue * 100) / 100,
       };
     });
 
-    const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
-    const calculatedTotalTax = calculatedSubtotal * (taxPercent / 100);
-    const calculatedGrandTotal = calculatedSubtotal + calculatedTotalTax + tip;
+    const calculatedGrandTotal = Math.max(0, calculatedSubtotal - discount + calculatedTotalTax + tip + serviceCharge);
 
     return {
       debts: calculatedDebts,
@@ -177,7 +210,7 @@ export default function AssignBill({
       totalTax: calculatedTotalTax,
       grandTotal: calculatedGrandTotal,
     };
-  }, [items, friends, myName, taxPercent, tip]);
+  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -532,31 +565,61 @@ export default function AssignBill({
               </select>
             </div>
 
-            {/* Tax & Tip Row */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Tax, Tip, Fee & Discount Row */}
+            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
               <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
-                  {t("split.tax")}
+                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Tax">
+                  {currency === "USD" ? `${t("split.tax")} ($)` : `${t("split.tax")} (%)`}
                 </label>
                 <input
                   type="number"
+                  step={currency === "USD" ? "0.01" : "1"}
                   placeholder="0"
                   value={taxPercent || ""}
                   onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
               </div>
               <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
+                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Tip">
                   {t("split.tip", { symbol: currency === "VND" ? "đ" : "$" })}
                 </label>
                 <input
                   type="number"
+                  step={currency === "USD" ? "0.01" : "1000"}
                   placeholder="0"
                   value={tip || ""}
                   onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                  style={{ borderColor: C.border }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Service Charge">
+                  {t("split.fee", { symbol: currency === "VND" ? "đ" : "$" })}
+                </label>
+                <input
+                  type="number"
+                  step={currency === "USD" ? "0.01" : "1000"}
+                  placeholder="0"
+                  value={serviceCharge || ""}
+                  onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
+                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                  style={{ borderColor: C.border }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-tm mb-1 block font-semibold truncate text-green" title="Discount">
+                  {t("split.discount", { symbol: currency === "VND" ? "đ" : "$" })}
+                </label>
+                <input
+                  type="number"
+                  step={currency === "USD" ? "0.01" : "1000"}
+                  placeholder="0"
+                  value={discount || ""}
+                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-green"
                   style={{ borderColor: C.border }}
                 />
               </div>
@@ -589,14 +652,26 @@ export default function AssignBill({
                 <span>{t("split.itemsSubtotal")}:</span>
                 <span className="font-mono font-bold text-white">{formatCurrency(subtotal)}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-green">
+                  <span>{t("split.discountLabel") || t("split.discount_label") || "Discount"}:</span>
+                  <span className="font-mono font-bold">-{formatCurrency(discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-tm">
-                <span>{t("split.taxLabel")} ({taxPercent}%):</span>
+                <span>{t("split.taxLabel")} {currency === "USD" ? "" : `(${taxPercent}%)`}:</span>
                 <span className="font-mono font-bold text-white">{formatCurrency(totalTax)}</span>
               </div>
               <div className="flex justify-between text-tm">
                 <span>{t("split.flatTip")}:</span>
                 <span className="font-mono font-bold text-white">{formatCurrency(tip)}</span>
               </div>
+              {serviceCharge > 0 && (
+                <div className="flex justify-between text-tm">
+                  <span>{t("split.serviceFee") || t("split.service_fee") || "Service Charge"}:</span>
+                  <span className="font-mono font-bold text-white">{formatCurrency(serviceCharge)}</span>
+                </div>
+              )}
 
               <div className="flex justify-between text-sm font-bold text-white pt-2.5 border-t items-center" style={{ borderColor: C.border }}>
                 <span className="flex items-center gap-1">
