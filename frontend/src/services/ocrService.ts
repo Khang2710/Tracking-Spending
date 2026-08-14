@@ -137,20 +137,29 @@ Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string, defaultName: string): OcrParsedItem[] {
   let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
-  const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
-  const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  try {
+    const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
+    const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
-  if (objMatch) {
-    const parsedObj = JSON.parse(objMatch[0]);
-    if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
-  } else if (arrayMatch) {
-    itemsJson = JSON.parse(arrayMatch[0]);
-  } else {
-    try {
+    if (objMatch) {
+      const parsedObj = JSON.parse(objMatch[0]);
+      if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+    } else if (arrayMatch) {
+      itemsJson = JSON.parse(arrayMatch[0]);
+    } else {
       const directParse = JSON.parse(cleanText);
       itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
-    } catch (e) {
-      console.warn("Direct JSON parse failed:", e);
+    }
+  } catch (e) {
+    // Regex fallback for truncated or partially malformed JSON
+    const objectMatches = cleanText.match(/\{\s*"(?:name|item)"[\s\S]*?\}/gi);
+    if (objectMatches) {
+      objectMatches.forEach((objStr) => {
+        try {
+          const item = JSON.parse(objStr);
+          if (item && (item.name || item.price)) itemsJson.push(item);
+        } catch (err) {}
+      });
     }
   }
 

@@ -96,19 +96,31 @@ Bỏ qua phần thuế (Tax) và tip ở cuối hóa đơn.`;
 
 function extractJsonItems(cleanText: string): OcrItem[] {
   let itemsJson: Array<{ name?: string; item?: string; description?: string; price?: unknown; amount?: unknown; total?: unknown; currency?: string }> = [];
-  const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
-  const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
-  if (objMatch) {
-    const parsedObj = JSON.parse(objMatch[0]);
-    if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
-  } else if (arrayMatch) {
-    itemsJson = JSON.parse(arrayMatch[0]);
-  } else {
-    try {
+  try {
+    const objMatch = cleanText.match(/\{\s*"items"[\s\S]*\}/);
+    const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+    if (objMatch) {
+      const parsedObj = JSON.parse(objMatch[0]);
+      if (Array.isArray(parsedObj.items)) itemsJson = parsedObj.items;
+    } else if (arrayMatch) {
+      itemsJson = JSON.parse(arrayMatch[0]);
+    } else {
       const directParse = JSON.parse(cleanText);
       itemsJson = Array.isArray(directParse) ? directParse : (directParse.items || []);
-    } catch (e) {}
+    }
+  } catch (e) {
+    // Regex fallback for truncated or partially malformed JSON
+    const objectMatches = cleanText.match(/\{\s*"(?:name|item)"[\s\S]*?\}/gi);
+    if (objectMatches) {
+      objectMatches.forEach((objStr) => {
+        try {
+          const item = JSON.parse(objStr);
+          if (item && (item.name || item.price)) itemsJson.push(item);
+        } catch (err) {}
+      });
+    }
   }
 
   let detectedCurrency: "USD" | "VND" | undefined;
@@ -184,7 +196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           body: JSON.stringify({
             model: "qwen/qwen3.6-27b",
-            max_tokens: 1000,
+            max_tokens: 4000,
             messages: [
               { role: "system", content: PROMPT_TEXT },
               {
@@ -203,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const rawContent = result.choices?.[0]?.message?.content || "";
           const cleanText = rawContent
             .replace(/<think>[\s\S]*?<\/think>/gi, "")
-            .replace(/```json/g, "")
+            .replace(/```json/gi, "")
             .replace(/```/g, "")
             .trim();
 
@@ -230,7 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
-          max_tokens: 1000,
+          max_tokens: 4000,
           messages: [
             { role: "system", content: PROMPT_TEXT },
             {
