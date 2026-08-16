@@ -53,6 +53,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <mainClass>com.spending.tracker.Application</mainClass>
+                    <jvmArguments>-Xms64m -Xmx256m -XX:+UseSerialGC -XX:MaxMetaspaceSize=96m</jvmArguments>
                 </configuration>
             </plugin>
         </plugins>

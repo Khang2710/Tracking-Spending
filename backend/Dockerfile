@@ -16,8 +16,18 @@ WORKDIR /app
 # Copy compiled JAR artifact from build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Render assigns a dynamic PORT environment variable (default 8080)
+# Render assigns a dynamic PORT environment variable
 EXPOSE 8080
 ENV PORT=8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Limit JVM memory to fit within Render free tier (512MB total RAM)
+# -Xms64m: start with 64MB heap
+# -Xmx256m: max 256MB heap
+# -XX:+UseSerialGC: lower GC overhead (single-threaded, suits low-CPU env)
+# -XX:MaxMetaspaceSize=128m: cap Metaspace
+ENTRYPOINT ["java", \
+  "-Xms64m", "-Xmx256m", \
+  "-XX:+UseSerialGC", \
+  "-XX:MaxMetaspaceSize=128m", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]
