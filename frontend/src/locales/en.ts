@@ -10,6 +10,8 @@ const en = {
     card: "Card",
     today: "Today",
     edit: "Edit",
+    transactionDeleted: "Transaction deleted",
+    undo: "Undo",
   },
   menu: {
     home: "Home",
@@ -124,6 +126,7 @@ const en = {
     select_item_hint: "Select an item above to start assigning!",
     addFriend: "Add Friend",
     add_friend: "Add Friend",
+    removeFriend: "Remove friend",
     calculationsShare: "Calculations Share",
     calculations_share: "Calculations Share",
     billTitle: "BILL TITLE",
@@ -169,6 +172,20 @@ const en = {
     person: "person",
     sharedAll: "Shared (Split equally among {{count}} people)",
     shared_all: "Shared (Split equally among {{count}} people)",
+    savedGroups: "Frequent Groups",
+    saved_groups: "Frequent Groups",
+    saveGroup: "Save Group",
+    save_group: "Save Group",
+    saveGroupHint: "Save the current friends list as a reusable group",
+    save_group_hint: "Save the current friends list as a reusable group",
+    groupNamePlaceholder: "Group name (e.g. Lunch Crew)",
+    group_name_placeholder: "Group name (e.g. Lunch Crew)",
+    groupSaved: "Group saved!",
+    group_saved: "Group saved!",
+    groupAlreadyAdded: "This group is already in your friends list",
+    group_already_added: "This group is already in your friends list",
+    noGroupsHint: "No groups yet. Add friends and hit \"Save Group\" for one-tap reuse next time.",
+    no_groups_hint: "No groups yet. Add friends and hit \"Save Group\" for one-tap reuse next time.",
   },
   nudge: {
     btn: "Meme Nudge AI",
@@ -179,6 +196,7 @@ const en = {
   debt: {
     lent: "Lent",
     owed: "Owed",
+    youOwe: "You owe money",
     youLent: "You lent money",
     you_lent: "You lent money",
     owesYou: "Owes you money",
@@ -191,6 +209,7 @@ const en = {
     noBalances: "No running balances recorded yet.",
     no_balances: "No running balances recorded yet.",
     addFriendHint: "Add friends and split bills to see balances here!",
+    removeFriend: "Remove friend",
     add_friend_hint: "Add friends and split bills to see balances here!",
     detailTitle: "Debt Detail",
     detail_title: "Debt Detail",
@@ -211,9 +230,16 @@ const en = {
     no_active_balance: "No active balance",
     owesYouAmount: "owes you this amount",
     owes_you_amount: "owes you this amount",
+    owesToAmount: "owes to",
     youOweAmount: "You owe this amount to",
     you_owe_amount: "You owe this amount to",
-  }
+  },
+  budget: {
+    byCategory: "Per-Category Budget",
+    by_category: "Per-Category Budget",
+    overBudget: "Over budget",
+    over_budget: "Over budget",
+  },
 };
 
 export default en;

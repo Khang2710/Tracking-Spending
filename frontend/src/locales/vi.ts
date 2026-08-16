@@ -10,6 +10,8 @@ const vi = {
     card: "Thẻ",
     today: "Hôm nay",
     edit: "Sửa",
+    transactionDeleted: "Đã xóa giao dịch",
+    undo: "Hoàn tác",
   },
   menu: {
     home: "Trang chủ",
@@ -124,6 +126,7 @@ const vi = {
     select_item_hint: "Chọn một món ở trên để bắt đầu chia!",
     addFriend: "Thêm bạn",
     add_friend: "Thêm bạn",
+    removeFriend: "Xoá bạn",
     calculationsShare: "Kết quả chia tiền",
     calculations_share: "Kết quả chia tiền",
     billTitle: "Tên hóa đơn",
@@ -169,6 +172,20 @@ const vi = {
     person: "người",
     sharedAll: "Dùng chung (Chia đều cho {{count}} người)",
     shared_all: "Dùng chung (Chia đều cho {{count}} người)",
+    savedGroups: "Nhóm thường dùng",
+    saved_groups: "Nhóm thường dùng",
+    saveGroup: "Lưu nhóm này",
+    save_group: "Lưu nhóm này",
+    saveGroupHint: "Lưu danh sách bạn bè hiện tại thành nhóm để dùng lại sau",
+    save_group_hint: "Lưu danh sách bạn bè hiện tại thành nhóm để dùng lại sau",
+    groupNamePlaceholder: "Tên nhóm (vd: Hội ăn trưa)",
+    group_name_placeholder: "Tên nhóm (vd: Hội ăn trưa)",
+    groupSaved: "Đã lưu nhóm!",
+    group_saved: "Đã lưu nhóm!",
+    groupAlreadyAdded: "Cả nhóm này đã có trong danh sách bạn bè",
+    group_already_added: "Cả nhóm này đã có trong danh sách bạn bè",
+    noGroupsHint: "Chưa có nhóm nào. Thêm bạn bè rồi bấm \"Lưu nhóm này\" để tạo nhanh cho lần sau.",
+    no_groups_hint: "Chưa có nhóm nào. Thêm bạn bè rồi bấm \"Lưu nhóm này\" để tạo nhanh cho lần sau.",
   },
   nudge: {
     btn: "Đòi nợ Meme AI",
@@ -179,6 +196,7 @@ const vi = {
   debt: {
     lent: "Cho vay",
     owed: "Đang nợ",
+    youOwe: "Bạn đang nợ",
     youLent: "Bạn cho vay",
     you_lent: "Bạn cho vay",
     owesYou: "Nợ bạn",
@@ -192,6 +210,7 @@ const vi = {
     no_balances: "Chưa có dư nợ nào được ghi nhận.",
     addFriendHint: "Thêm bạn bè và chia hoá đơn để theo dõi dư nợ!",
     add_friend_hint: "Thêm bạn bè và chia hoá đơn để theo dõi dư nợ!",
+    removeFriend: "Xoá bạn",
     detailTitle: "Chi tiết nợ",
     detail_title: "Chi tiết nợ",
     aiNudgeEnabled: "Đòi nợ AI Bật",
@@ -211,9 +230,16 @@ const vi = {
     no_active_balance: "Không có dư nợ hoạt động",
     owesYouAmount: "đang nợ bạn số tiền này",
     owes_you_amount: "đang nợ bạn số tiền này",
+    owesToAmount: "đang nợ",
     youOweAmount: "Bạn đang nợ số tiền này với",
     you_owe_amount: "Bạn đang nợ số tiền này với",
-  }
+  },
+  budget: {
+    byCategory: "Ngân sách theo danh mục",
+    by_category: "Ngân sách theo danh mục",
+    overBudget: "Vượt ngân sách",
+    over_budget: "Vượt ngân sách",
+  },
 };
 
 export default vi;

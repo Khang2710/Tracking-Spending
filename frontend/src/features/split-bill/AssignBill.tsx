@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, ArrowUpRight } from "lucide-react";
+import { Plus, Trash2, ArrowUpRight, X, UsersRound, BookmarkPlus, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { C, Card } from "../../App";
 
 interface SplitItem {
@@ -10,7 +11,7 @@ interface SplitItem {
   consumers: string[];
 }
 
-import { FriendBalanceItem, SavedBill } from "./SplitScreen";
+import { FriendBalanceItem, FriendGroup, SavedBill } from "./SplitScreen";
 import { Transaction } from "../../App";
 import { useCurrency } from "../../context/CurrencyContext";
 import { OcrScannerCard } from "./OcrScannerCard";
@@ -25,6 +26,9 @@ interface AssignBillProps {
   userName: string;
   setBills: React.Dispatch<React.SetStateAction<SavedBill[]>>;
   onAddTransaction?: (tx: Omit<Transaction, "id">) => void;
+  groups: FriendGroup[];
+  onSaveGroup: (name: string) => void;
+  onDeleteGroup: (id: string) => void;
 }
 
 export default function AssignBill({
@@ -36,6 +40,9 @@ export default function AssignBill({
   userName,
   setBills,
   onAddTransaction,
+  groups,
+  onSaveGroup,
+  onDeleteGroup,
 }: AssignBillProps) {
   const { t } = useTranslation();
   const { formatCurrency, currency, setCurrency } = useCurrency();
@@ -47,6 +54,8 @@ export default function AssignBill({
   const [discount, setDiscount] = useState<number>(0);
 
   const [newFriendName, setNewFriendName] = useState("");
+  const [showSaveGroupInput, setShowSaveGroupInput] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
   const [apiKeyInput] = useState(() => (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
@@ -129,6 +138,35 @@ export default function AssignBill({
   const handleRemoveItem = (id: number) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
     if (selectedItemId === id) setSelectedItemId(null);
+  };
+
+  // Recurring groups: apply a saved group by adding its missing members to the roster
+  const handleApplyGroup = (group: FriendGroup) => {
+    let addedCount = 0;
+    group.members.forEach((m) => {
+      const clean = m.normalize("NFC").trim();
+      if (!clean) return;
+      const exists = friends.some(
+        (f) => f.normalize("NFC").trim().toLowerCase() === clean.toLowerCase()
+      );
+      if (!exists) {
+        onAddFriend(clean);
+        addedCount++;
+      }
+    });
+    if (addedCount === 0) {
+      toast.info(t("split.groupAlreadyAdded", "Cả nhóm này đã có trong danh sách bạn bè"));
+    }
+  };
+
+  const handleSaveGroupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newGroupName.trim();
+    if (!name || friends.length === 0) return;
+    onSaveGroup(name);
+    setNewGroupName("");
+    setShowSaveGroupInput(false);
+    toast.success(t("split.groupSaved", "Đã lưu nhóm!"));
   };
 
   const handleToggleConsumer = (friendName: string) => {
@@ -244,30 +282,43 @@ export default function AssignBill({
         const d = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === fbNormName);
         if (!d) return fb;
 
-        let diff = 0;
-        let desc = "";
-        let isLent = false;
-
         const activePayerNorm = activePayer.normalize("NFC").trim().toLowerCase();
         const myNameNorm = myName.normalize("NFC").trim().toLowerCase();
 
-        if (activePayerNorm === myNameNorm) {
-          diff = d.total;
-          desc = `${finalTitle} (${t("split.youPaid") || "Bạn đã trả"})`;
-          isLent = true;
-        } else if (activePayerNorm === fbNormName) {
-          const myDebt = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === myNameNorm);
-          const myShare = myDebt ? myDebt.total : 0;
-          diff = -myShare;
+        const isFriendThePayer = activePayerNorm === fbNormName;
+        const iAmThePayer = activePayerNorm === myNameNorm;
+
+        let diff = 0;
+        let amount = 0;
+        let desc = "";
+        let isLent = false;
+        let owedTo = "";
+
+        if (isFriendThePayer) {
+          // This friend paid: I owe them my share only (negative balance = I owe).
+          const myShare = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === myNameNorm)?.total ?? 0;
+          diff = -Math.round(myShare * 100) / 100;
+          amount = Math.abs(diff);
           desc = `${finalTitle} (${fb.name} ${t("split.paid") || "đã trả"})`;
           isLent = false;
+        } else if (iAmThePayer) {
+          // I paid: each friend owes me their share.
+          diff = d.total;
+          amount = d.total;
+          desc = `${finalTitle} (${t("split.youPaid") || "Bạn đã trả"})`;
+          isLent = true;
         } else {
-          diff = 0;
+          // A third party paid: this friend owes the payer (friend-to-friend debt,
+          // recorded on their row so it stays visible in Running Balances).
+          amount = d.total;
           desc = `${finalTitle} (${t("split.paidBy") || "Trả bởi"} ${activePayer})`;
           isLent = false;
+          if (d.total > 0) {
+            owedTo = activePayer;
+          }
         }
 
-        if (diff === 0) return fb;
+        if (diff === 0 && !owedTo) return fb;
 
         return {
           ...fb,
@@ -276,10 +327,11 @@ export default function AssignBill({
             {
               id: String(Date.now() + Math.random()),
               date: new Date().toLocaleDateString("vi-VN"),
-              amount: Math.abs(diff),
+              amount,
               description: desc,
               isLent,
               isSettled: false,
+              owedTo: owedTo || undefined,
             },
             ...fb.history,
           ],
@@ -506,6 +558,19 @@ export default function AssignBill({
                     <span>
                       {personName} {isMe && `(${t("common.you")})`}
                     </span>
+                    {!isMe && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveFriend(personName);
+                        }}
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-tm hover:text-red hover:bg-red/10 transition-colors cursor-pointer bg-transparent border-0 p-0 -ml-1"
+                        title={t("split.removeFriend")}
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -521,6 +586,96 @@ export default function AssignBill({
                   style={{ borderColor: C.border }}
                 />
               </form>
+            </div>
+
+            {/* Recurring Groups Section (Save Group / Frequent Groups) */}
+            <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h4 className="text-xs font-semibold text-tm flex items-center gap-1.5">
+                  <UsersRound size={12} /> {t("split.savedGroups", "Nhóm thường dùng")}
+                </h4>
+
+                {showSaveGroupInput ? (
+                  <form onSubmit={handleSaveGroupSubmit} className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder={t("split.groupNamePlaceholder", "Tên nhóm (vd: Hội ăn trưa)")}
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      className="px-3 py-1.5 rounded-full border text-xs text-white bg-surf outline-none focus:border-gold w-40 md:w-48"
+                      style={{ borderColor: C.border }}
+                    />
+                    <button
+                      type="submit"
+                      className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer transition-all hover:brightness-110 border-0 shrink-0"
+                      style={{ background: C.green, color: C.bg }}
+                      title={t("common.save", "Lưu")}
+                    >
+                      <Check size={13} strokeWidth={3} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSaveGroupInput(false);
+                        setNewGroupName("");
+                      }}
+                      className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer transition-colors text-tm hover:text-white hover:bg-surf border-0 p-0 shrink-0"
+                      title={t("common.cancel", "Hủy")}
+                    >
+                      <X size={13} />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveGroupInput(true)}
+                    disabled={friends.length === 0}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold cursor-pointer transition-all hover:brightness-110 border disabled:opacity-40 disabled:cursor-not-allowed bg-transparent"
+                    style={{ borderColor: C.gold + "55", color: C.gold }}
+                    title={t("split.saveGroupHint", "Lưu danh sách bạn bè hiện tại thành nhóm")}
+                  >
+                    <BookmarkPlus size={12} /> {t("split.saveGroup", "Lưu nhóm này")}
+                  </button>
+                )}
+              </div>
+
+              {groups.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {groups.map((g) => (
+                    <div
+                      key={g.id}
+                      onClick={() => handleApplyGroup(g)}
+                      className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full border text-[11px] font-semibold cursor-pointer transition-all hover:brightness-125"
+                      style={{ borderColor: C.border, background: C.surf + "60", color: C.white }}
+                      title={g.members.join(", ")}
+                    >
+                      <UsersRound size={11} style={{ color: C.gold }} />
+                      <span>
+                        {g.name} <span className="text-tm">({g.members.length})</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteGroup(g.id);
+                        }}
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-tm hover:text-red hover:bg-red/10 transition-colors cursor-pointer bg-transparent border-0 p-0"
+                        title={t("split.removeFriend", "Xoá")}
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-tm leading-relaxed">
+                  {t(
+                    "split.noGroupsHint",
+                    "Chưa có nhóm nào. Thêm bạn bè rồi bấm \"Lưu nhóm này\" để tạo nhanh cho lần sau."
+                  )}
+                </p>
+              )}
             </div>
           </Card>
         </div>

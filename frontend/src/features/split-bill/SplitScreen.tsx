@@ -26,6 +26,7 @@ export interface TransactionRecord {
   amount: number;
   isLent: boolean;
   isSettled?: boolean;
+  owedTo?: string; // if set: this friend owes `amount` to a third party, not the current user
 }
 
 export interface FriendBalanceItem {
@@ -33,6 +34,12 @@ export interface FriendBalanceItem {
   name: string;
   balance: number;
   history: TransactionRecord[];
+}
+
+export interface FriendGroup {
+  id: string;
+  name: string;
+  members: string[];
 }
 
 import { Transaction } from "../../App";
@@ -132,9 +139,32 @@ export default function SplitScreen({
     }
   });
 
+  const [groups, setGroups] = useState<FriendGroup[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_split_groups");
+      const parsed: any = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((g: any) => g && typeof g.name === "string" && Array.isArray(g.members))
+          .map((g: any) => ({
+            id: String(g.id || Date.now() + Math.random()),
+            name: g.name,
+            members: g.members.filter((m: any) => typeof m === "string" && m.trim()),
+          }));
+      }
+    } catch (e) {
+      console.error("Error reading split groups", e);
+    }
+    return [];
+  });
+
   useEffect(() => {
     localStorage.setItem("wealthy_v2_split_friends", JSON.stringify(friends));
   }, [friends]);
+
+  useEffect(() => {
+    localStorage.setItem("wealthy_v2_split_groups", JSON.stringify(groups));
+  }, [groups]);
 
   useEffect(() => {
     localStorage.setItem("wealthy_v2_split_balances", JSON.stringify(balances));
@@ -168,6 +198,27 @@ export default function SplitScreen({
     setBalances((prev) => prev.filter((b) => b.name.normalize("NFC").trim().toLowerCase() !== normName));
   };
 
+  // Recurring groups: save current friends roster under a name (e.g. "Hội ăn trưa")
+  const handleSaveGroup = (name: string) => {
+    const cleanName = name.normalize("NFC").trim();
+    if (!cleanName || friends.length === 0) return;
+
+    setGroups((prev) => {
+      const existing = prev.find((g) => g.name.toLowerCase() === cleanName.toLowerCase());
+      if (existing) {
+        // Same-name group: refresh its members
+        return prev.map((g) =>
+          g.id === existing.id ? { ...g, members: [...friends] } : g
+        );
+      }
+      return [...prev, { id: Date.now().toString(), name: cleanName, members: [...friends] }];
+    });
+  };
+
+  const handleDeleteGroup = (id: string) => {
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+  };
+
   const handleSettleTransaction = (friendName: string, transactionId: string) => {
     const normFriend = friendName.normalize("NFC").trim().toLowerCase();
     setBalances((prev) =>
@@ -177,7 +228,9 @@ export default function SplitScreen({
         let balanceAdjust = 0;
         const updatedHistory = fb.history.map((tx) => {
           if (tx.id === transactionId && !tx.isSettled) {
-            balanceAdjust = tx.isLent ? -tx.amount : tx.amount;
+            if (!tx.owedTo) {
+              balanceAdjust = tx.isLent ? -tx.amount : tx.amount;
+            }
             return { ...tx, isSettled: true };
           }
           return tx;
@@ -279,6 +332,9 @@ export default function SplitScreen({
             userName={userName}
             setBills={setBills}
             onAddTransaction={onAddTransaction}
+            groups={groups}
+            onSaveGroup={handleSaveGroup}
+            onDeleteGroup={handleDeleteGroup}
           />
         </div>
         <div style={{ display: subTab === "history" ? "block" : "none" }}>

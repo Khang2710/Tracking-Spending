@@ -41,3 +41,7 @@ Dockerfile
 dist/
 build/
 .env*
+
+#Note and checkpoint    
+Note.md
+TODO.md
