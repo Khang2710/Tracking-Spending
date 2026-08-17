@@ -112,6 +112,23 @@ export function useSyncData<T>(
     };
   }, [revalidate, revalidateOnFocus]);
 
+  // 5. Cross-Tab Sync: Listen for localStorage changes from other tabs in the same browser
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === key && event.newValue) {
+        try {
+          const freshData = JSON.parse(event.newValue) as T;
+          setData(freshData);
+        } catch (e) {
+          console.error(`[useSyncData] Error parsing storage event for key "${key}":`, e);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [key]);
+
   return {
     data,
     isLoading,
