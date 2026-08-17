@@ -7,7 +7,7 @@ import com.spending.tracker.service.UserService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
+import javax.crypto.spec.SecretKeySpec;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -109,15 +109,15 @@ public class SupabaseJwtFilter extends OncePerRequestFilter {
         String trimmed = secret.trim();
 
         try {
-            keys[0] = Keys.hmacShaKeyFor(Base64.getDecoder().decode(trimmed));
+            keys[0] = new SecretKeySpec(Base64.getDecoder().decode(trimmed), "HmacSHA256");
         } catch (Exception ignored) {}
 
         try {
-            keys[1] = Keys.hmacShaKeyFor(Decoders.BASE64URL.decode(trimmed));
+            keys[1] = new SecretKeySpec(Decoders.BASE64URL.decode(trimmed), "HmacSHA256");
         } catch (Exception ignored) {}
 
         try {
-            keys[2] = Keys.hmacShaKeyFor(trimmed.getBytes(StandardCharsets.UTF_8));
+            keys[2] = new SecretKeySpec(trimmed.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         } catch (Exception ignored) {}
 
         return keys;
