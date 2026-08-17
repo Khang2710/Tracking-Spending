@@ -772,8 +772,8 @@ export default function App() {
         }))
       : savingsGoals;
 
-    let totalB = budget;
-    let catBMap = categoryBudgets;
+    let totalB = getInitialBudget();
+    let catBMap = getInitialCategoryBudgets();
 
     if (Array.isArray(bootstrapData.budgets) && bootstrapData.budgets.length > 0) {
       let cloudTotal = 0;
@@ -827,7 +827,7 @@ export default function App() {
         setSavingsGoals(syncData.savingsGoals);
       }
       if (typeof syncData.budget === "number" && syncData.budget > 0) {
-        setBudget((prev) => (syncData.budget > 0 ? syncData.budget : prev));
+        setBudget(syncData.budget);
       }
       if (syncData.categoryBudgets && Object.keys(syncData.categoryBudgets).length > 0) {
         setCategoryBudgets(syncData.categoryBudgets);
@@ -1359,13 +1359,21 @@ export default function App() {
             // Update SWR cache and trigger revalidation
             try {
               const currentCache = getOfflineCache() || {};
-              localStorage.setItem("wealthy_offline_cache", JSON.stringify({
+              const updatedCache = {
                 ...currentCache,
                 budget: finalTotal,
                 categoryBudgets: finalCats,
-              }));
+              };
+              const cacheStr = JSON.stringify(updatedCache);
+              localStorage.setItem("wealthy_offline_cache", cacheStr);
               localStorage.setItem("wealthy_v2_budget", finalTotal.toString());
               localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(finalCats));
+
+              window.dispatchEvent(new StorageEvent("storage", {
+                key: "wealthy_offline_cache",
+                newValue: cacheStr,
+              }));
+
               revalidateApp();
             } catch (e) {
               console.error("[Cache] Failed to update budget cache:", e);
