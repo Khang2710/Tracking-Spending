@@ -70,6 +70,12 @@ public class SupabaseJwtFilter extends OncePerRequestFilter {
                         .getPayload();
                 authId = claims.getSubject();
                 email = claims.get("email", String.class);
+                if ((email == null || email.isBlank()) && claims.get("user_metadata") instanceof java.util.Map) {
+                    java.util.Map<?, ?> meta = (java.util.Map<?, ?>) claims.get("user_metadata");
+                    if (meta.get("email") != null) {
+                        email = meta.get("email").toString();
+                    }
+                }
                 if (authId != null && !authId.isBlank()) {
                     break;
                 }
@@ -92,6 +98,8 @@ public class SupabaseJwtFilter extends OncePerRequestFilter {
                         authId = payloadJson.get("sub").asText();
                         if (payloadJson.has("email")) {
                             email = payloadJson.get("email").asText();
+                        } else if (payloadJson.has("user_metadata") && payloadJson.get("user_metadata").has("email")) {
+                            email = payloadJson.get("user_metadata").get("email").asText();
                         }
                     }
                 }
