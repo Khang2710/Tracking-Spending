@@ -727,6 +727,8 @@ export default function App() {
     if (!session?.access_token) return null;
 
     const res = await fetch(`${BACKEND_URL}/api/sync/bootstrap`, {
+      method: "GET",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
@@ -813,6 +815,13 @@ export default function App() {
       revalidateOnFocus: true,
     }
   );
+
+  // Trigger initial fetch when session becomes available to fix empty state bugs
+  useEffect(() => {
+    if (session?.access_token) {
+      revalidateApp();
+    }
+  }, [session?.access_token, revalidateApp]);
 
   // Sync SWR Data to local Component States when data revalidates
   useEffect(() => {
