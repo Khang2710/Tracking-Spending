@@ -657,18 +657,66 @@ export default function App() {
     "";
   const displayName = userName || authDisplayName || "User";
 
+  // Offline Cache Helper (Stale-While-Revalidate)
+  const getOfflineCache = () => {
+    try {
+      const raw = localStorage.getItem("wealthy_offline_cache");
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const initialCache = getOfflineCache();
+
+  // Initial Budget Resolvers (with fallback to wealthy_v2_budget)
+  const getInitialBudget = (): number => {
+    if (typeof initialCache?.budget === "number" && initialCache.budget > 0) {
+      return initialCache.budget;
+    }
+    const legacy = localStorage.getItem("wealthy_v2_budget");
+    if (legacy) {
+      const parsed = parseFloat(legacy);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 0;
+  };
+
+  const getInitialCategoryBudgets = (): Record<string, number> => {
+    if (initialCache?.categoryBudgets && Object.keys(initialCache.categoryBudgets).length > 0) {
+      return initialCache.categoryBudgets;
+    }
+    const legacy = localStorage.getItem("wealthy_v2_category_budgets");
+    if (legacy) {
+      try {
+        const parsed = JSON.parse(legacy);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {}
+    }
+    return {};
+  };
+
   // Data Loading & API Sync States
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // States initialized from API / fallback
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [wallets, setWallets] = useState<Wallet[]>(initialWallets);
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  // States initialized instantly from localStorage cache / fallback
+  const [transactions, setTransactions] = useState<Transaction[]>(
+    initialCache?.transactions?.length ? initialCache.transactions : initialTransactions
+  );
+  const [wallets, setWallets] = useState<Wallet[]>(
+    initialCache?.wallets?.length ? initialCache.wallets : initialWallets
+  );
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(
+    initialCache?.savingsGoals || []
+  );
+  const [budget, setBudget] = useState<number>(getInitialBudget);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(getInitialCategoryBudgets);
 
   const { session } = useAuth();
   const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:8080";
 
-  // Fetch initial data from Spring Boot REST API when authenticated
+  // Fetch initial bootstrap data from Spring Boot REST API (Single Round-Trip Endpoint)
   useEffect(() => {
     let isMounted = true;
 
@@ -684,29 +732,22 @@ export default function App() {
       };
 
       try {
-        // 1. Fetch Wallets
-        const walletRes = await fetch(`${BACKEND_URL}/api/wallets`, { headers });
-        if (walletRes.ok) {
-          const cloudWallets = await walletRes.json();
-          if (Array.isArray(cloudWallets) && cloudWallets.length > 0 && isMounted) {
-            setWallets(
-              cloudWallets.map((w: any) => ({
+        const res = await fetch(`${BACKEND_URL}/api/sync/bootstrap`, { headers });
+        if (res.ok) {
+          const bootstrapData = await res.json();
+          if (!isMounted) return;
+
+          const cloudWallets: Wallet[] = Array.isArray(bootstrapData.wallets) && bootstrapData.wallets.length > 0
+            ? bootstrapData.wallets.map((w: any) => ({
                 id: w.id,
                 label: w.name || w.label || "Ví chính",
                 balance: typeof w.balance === "number" ? w.balance : 0,
                 accent: C.gold,
               }))
-            );
-          }
-        }
+            : wallets;
 
-        // 2. Fetch Transactions
-        const txRes = await fetch(`${BACKEND_URL}/api/transactions`, { headers });
-        if (txRes.ok) {
-          const cloudTxs = await txRes.json();
-          if (Array.isArray(cloudTxs) && isMounted) {
-            setTransactions(
-              cloudTxs.map((t: any) => ({
+          const cloudTxs: Transaction[] = Array.isArray(bootstrapData.transactions)
+            ? bootstrapData.transactions.map((t: any) => ({
                 id: t.id,
                 name: t.name || t.category || "Giao dịch",
                 date: t.date || new Date().toISOString(),
@@ -714,17 +755,10 @@ export default function App() {
                 category: t.category || "General",
                 walletId: t.wallet?.id || 1,
               }))
-            );
-          }
-        }
+            : transactions;
 
-        // 3. Fetch Savings Goals
-        const goalRes = await fetch(`${BACKEND_URL}/api/savings-goals`, { headers });
-        if (goalRes.ok) {
-          const cloudGoals = await goalRes.json();
-          if (Array.isArray(cloudGoals) && isMounted) {
-            setSavingsGoals(
-              cloudGoals.map((g: any) => ({
+          const cloudGoals: SavingsGoal[] = Array.isArray(bootstrapData.savingsGoals)
+            ? bootstrapData.savingsGoals.map((g: any) => ({
                 id: g.id,
                 title: g.title,
                 targetAmount: Number(g.targetAmount) || 0,
@@ -734,33 +768,37 @@ export default function App() {
                 deadline: g.deadline || "",
                 status: g.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
               }))
-            );
-          }
-        }
+            : savingsGoals;
 
-        // 4. Fetch Budgets for Current Month
-        const currentMonthStr = new Date().toISOString().slice(0, 7);
-        const budgetRes = await fetch(`${BACKEND_URL}/api/budgets?month=${currentMonthStr}`, { headers });
-        if (budgetRes.ok) {
-          const cloudBudgets = await budgetRes.json();
-          if (Array.isArray(cloudBudgets) && isMounted) {
-            let totalB = 0;
-            const catBMap: Record<string, number> = {};
-
-            cloudBudgets.forEach((b: any) => {
+          let totalB = 0;
+          const catBMap: Record<string, number> = {};
+          if (Array.isArray(bootstrapData.budgets)) {
+            bootstrapData.budgets.forEach((b: any) => {
               if (b.category === "TOTAL") {
                 totalB = Number(b.amount) || 0;
               } else {
                 catBMap[b.category] = Number(b.amount) || 0;
               }
             });
-
-            setBudget(totalB);
-            setCategoryBudgets(catBMap);
           }
+
+          setWallets(cloudWallets);
+          setTransactions(cloudTxs);
+          setSavingsGoals(cloudGoals);
+          setBudget(totalB);
+          setCategoryBudgets(catBMap);
+
+          // Update offline cache for instant load next time
+          localStorage.setItem("wealthy_offline_cache", JSON.stringify({
+            wallets: cloudWallets,
+            transactions: cloudTxs,
+            savingsGoals: cloudGoals,
+            budget: totalB,
+            categoryBudgets: catBMap,
+          }));
         }
       } catch (err) {
-        console.error("[CloudData] Error fetching REST API data:", err);
+        console.error("[CloudData] Error fetching bootstrap data:", err);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -772,9 +810,6 @@ export default function App() {
       isMounted = false;
     };
   }, [session?.access_token]);
-
-  const [budget, setBudget] = useState<number>(0);
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -1075,15 +1110,6 @@ export default function App() {
     <SplitScreen userName={displayName} onAddTransaction={handleAddTransaction} />,
   ];
 
-  if (isLoading && user) {
-    return (
-      <div className="min-h-screen bg-[#0F0F10] flex flex-col items-center justify-center text-white gap-3 font-sans">
-        <div className="w-8 h-8 border-2 border-[#C9A45B] border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-[#8A8A8A] font-medium">Đang đồng bộ dữ liệu từ máy chủ...</p>
-      </div>
-    );
-  }
-
   return (
     <>
       <style>{`
@@ -1302,6 +1328,20 @@ export default function App() {
             });
             setBudget(totalB);
             setCategoryBudgets(catBMap);
+
+            // Update SWR cache so reloading instantly loads new budget
+            try {
+              const currentCache = getOfflineCache() || {};
+              localStorage.setItem("wealthy_offline_cache", JSON.stringify({
+                ...currentCache,
+                budget: totalB,
+                categoryBudgets: catBMap,
+              }));
+              localStorage.setItem("wealthy_v2_budget", totalB.toString());
+              localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(catBMap));
+            } catch (e) {
+              console.error("[Cache] Failed to update budget cache:", e);
+            }
           }
         }}
       />

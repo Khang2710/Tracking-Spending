@@ -1,12 +1,15 @@
 package com.spending.tracker.service;
 
+import com.spending.tracker.dto.AppBootstrapData;
 import com.spending.tracker.dto.SyncDataRequest;
 import com.spending.tracker.entity.Bill;
+import com.spending.tracker.entity.Budget;
 import com.spending.tracker.entity.SavingsGoal;
 import com.spending.tracker.entity.Transaction;
 import com.spending.tracker.entity.User;
 import com.spending.tracker.entity.Wallet;
 import com.spending.tracker.repository.BillRepository;
+import com.spending.tracker.repository.BudgetRepository;
 import com.spending.tracker.repository.SavingsGoalRepository;
 import com.spending.tracker.repository.TransactionRepository;
 import com.spending.tracker.repository.WalletRepository;
@@ -14,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,17 +30,53 @@ public class SyncService {
     private final TransactionRepository transactionRepository;
     private final SavingsGoalRepository savingsGoalRepository;
     private final BillRepository billRepository;
+    private final BudgetRepository budgetRepository;
 
     @Autowired
     public SyncService(
             WalletRepository walletRepository,
             TransactionRepository transactionRepository,
             SavingsGoalRepository savingsGoalRepository,
-            BillRepository billRepository) {
+            BillRepository billRepository,
+            BudgetRepository budgetRepository) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.savingsGoalRepository = savingsGoalRepository;
         this.billRepository = billRepository;
+        this.budgetRepository = budgetRepository;
+    }
+
+    /**
+     * Aggregates all initial data (Wallets, Transactions, Savings Goals, Current Month Budgets)
+     * for the currently authenticated User into a single DTO.
+     *
+     * @param currentUser Currently authenticated User entity
+     * @return AppBootstrapData object
+     */
+    public AppBootstrapData getBootstrapData(User currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new IllegalArgumentException("Invalid user context for bootstrap data");
+        }
+
+        Long userId = currentUser.getId();
+
+        // 1. Wallets
+        List<Wallet> wallets = walletRepository.findByUserIdOrderByIdAsc(userId);
+
+        // 2. Transactions
+        List<Transaction> transactions = new ArrayList<>();
+        for (Wallet w : wallets) {
+            transactions.addAll(transactionRepository.findByWalletId(w.getId()));
+        }
+
+        // 3. Savings Goals
+        List<SavingsGoal> savingsGoals = savingsGoalRepository.findByUserId(userId);
+
+        // 4. Budgets for Current Month (YYYY-MM)
+        String currentMonthStr = LocalDate.now().toString().substring(0, 7);
+        List<Budget> budgets = budgetRepository.findByUserIdAndPeriodMonth(userId, currentMonthStr);
+
+        return new AppBootstrapData(wallets, transactions, savingsGoals, budgets);
     }
 
     /**

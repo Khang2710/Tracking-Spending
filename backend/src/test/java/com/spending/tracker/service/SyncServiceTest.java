@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
+import com.spending.tracker.dto.AppBootstrapData;
+import com.spending.tracker.repository.BudgetRepository;
+import com.spending.tracker.entity.Budget;
+
 @ExtendWith(MockitoExtension.class)
 class SyncServiceTest {
 
@@ -40,6 +44,9 @@ class SyncServiceTest {
 
     @Mock
     private BillRepository billRepository;
+
+    @Mock
+    private BudgetRepository budgetRepository;
 
     @InjectMocks
     private SyncService syncService;
@@ -92,6 +99,29 @@ class SyncServiceTest {
         verify(transactionRepository, times(1)).saveAll(anyList());
         verify(savingsGoalRepository, times(1)).saveAll(anyList());
         verify(billRepository, times(1)).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("Should fetch all bootstrap data in single call")
+    void getBootstrapData_success() {
+        Wallet wallet = new Wallet("Ví Chính", 1000000.0, currentUser);
+        wallet.setId(1L);
+        Transaction tx = new Transaction(100000.0, "OUTCOME", "Food", java.time.LocalDateTime.now(), wallet);
+        SavingsGoal goal = new SavingsGoal();
+        Budget budget = new Budget(currentUser, "TOTAL", BigDecimal.valueOf(5000000), "2026-08");
+
+        when(walletRepository.findByUserIdOrderByIdAsc(10L)).thenReturn(List.of(wallet));
+        when(transactionRepository.findByWalletId(1L)).thenReturn(List.of(tx));
+        when(savingsGoalRepository.findByUserId(10L)).thenReturn(List.of(goal));
+        when(budgetRepository.findByUserIdAndPeriodMonth(eq(10L), anyString())).thenReturn(List.of(budget));
+
+        AppBootstrapData bootstrapData = syncService.getBootstrapData(currentUser);
+
+        assertNotNull(bootstrapData);
+        assertEquals(1, bootstrapData.getWallets().size());
+        assertEquals(1, bootstrapData.getTransactions().size());
+        assertEquals(1, bootstrapData.getSavingsGoals().size());
+        assertEquals(1, bootstrapData.getBudgets().size());
     }
 
     @Test
