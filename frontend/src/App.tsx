@@ -31,6 +31,15 @@ import TransactionManager, { TransactionDialog } from "./features/Transaction/Tr
 import StatisticsScreen, { AddGoalModal } from "./features/Statistics/Statistics";
 import BudgetManager from "./features/budget/BudgetManager";
 import { useTranslation } from "react-i18next";
+import { useSyncData } from "./hooks/useSyncData";
+
+export interface AppCacheData {
+  wallets: Wallet[];
+  transactions: Transaction[];
+  savingsGoals: SavingsGoal[];
+  budget: number;
+  categoryBudgets: Record<string, number>;
+}
 
 export interface SavingsGoal {
   id: number;
@@ -657,6 +666,9 @@ export default function App() {
     "";
   const displayName = userName || authDisplayName || "User";
 
+  const { session } = useAuth();
+  const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:8080";
+
   // Offline Cache Helper (Stale-While-Revalidate)
   const getOfflineCache = () => {
     try {
@@ -697,10 +709,7 @@ export default function App() {
     return {};
   };
 
-  // Data Loading & API Sync States
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // States initialized instantly from localStorage cache / fallback
+  // React States
   const [transactions, setTransactions] = useState<Transaction[]>(
     initialCache?.transactions?.length ? initialCache.transactions : initialTransactions
   );
@@ -713,103 +722,108 @@ export default function App() {
   const [budget, setBudget] = useState<number>(getInitialBudget);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(getInitialCategoryBudgets);
 
-  const { session } = useAuth();
-  const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:8080";
+  // Bootstrap API Fetcher for useSyncData
+  const fetchBootstrapData = useCallback(async (): Promise<AppCacheData | null> => {
+    if (!session?.access_token) return null;
 
-  // Fetch initial bootstrap data from Spring Boot REST API (Single Round-Trip Endpoint)
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCloudData() {
-      if (!session?.access_token) {
-        setIsLoading(false);
-        return;
-      }
-
-      const headers = {
+    const res = await fetch(`${BACKEND_URL}/api/sync/bootstrap`, {
+      headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
-      };
+      },
+    });
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/sync/bootstrap`, { headers });
-        if (res.ok) {
-          const bootstrapData = await res.json();
-          if (!isMounted) return;
-
-          const cloudWallets: Wallet[] = Array.isArray(bootstrapData.wallets) && bootstrapData.wallets.length > 0
-            ? bootstrapData.wallets.map((w: any) => ({
-                id: w.id,
-                label: w.name || w.label || "Ví chính",
-                balance: typeof w.balance === "number" ? w.balance : 0,
-                accent: C.gold,
-              }))
-            : wallets;
-
-          const cloudTxs: Transaction[] = Array.isArray(bootstrapData.transactions)
-            ? bootstrapData.transactions.map((t: any) => ({
-                id: t.id,
-                name: t.name || t.category || "Giao dịch",
-                date: t.date || new Date().toISOString(),
-                amount: typeof t.amount === "number" ? t.amount : 0,
-                category: t.category || "General",
-                walletId: t.wallet?.id || 1,
-              }))
-            : transactions;
-
-          const cloudGoals: SavingsGoal[] = Array.isArray(bootstrapData.savingsGoals)
-            ? bootstrapData.savingsGoals.map((g: any) => ({
-                id: g.id,
-                title: g.title,
-                targetAmount: Number(g.targetAmount) || 0,
-                currentAmount: Number(g.currentAmount) || 0,
-                icon: g.icon || "PiggyBank",
-                color: g.color || C.gold,
-                deadline: g.deadline || "",
-                status: g.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
-              }))
-            : savingsGoals;
-
-          let totalB = 0;
-          const catBMap: Record<string, number> = {};
-          if (Array.isArray(bootstrapData.budgets)) {
-            bootstrapData.budgets.forEach((b: any) => {
-              if (b.category === "TOTAL") {
-                totalB = Number(b.amount) || 0;
-              } else {
-                catBMap[b.category] = Number(b.amount) || 0;
-              }
-            });
-          }
-
-          setWallets(cloudWallets);
-          setTransactions(cloudTxs);
-          setSavingsGoals(cloudGoals);
-          setBudget(totalB);
-          setCategoryBudgets(catBMap);
-
-          // Update offline cache for instant load next time
-          localStorage.setItem("wealthy_offline_cache", JSON.stringify({
-            wallets: cloudWallets,
-            transactions: cloudTxs,
-            savingsGoals: cloudGoals,
-            budget: totalB,
-            categoryBudgets: catBMap,
-          }));
-        }
-      } catch (err) {
-        console.error("[CloudData] Error fetching bootstrap data:", err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+    if (!res.ok) {
+      throw new Error(`Failed to fetch bootstrap data (${res.status})`);
     }
 
-    loadCloudData();
+    const bootstrapData = await res.json();
 
-    return () => {
-      isMounted = false;
+    const cloudWallets: Wallet[] = Array.isArray(bootstrapData.wallets) && bootstrapData.wallets.length > 0
+      ? bootstrapData.wallets.map((w: any) => ({
+          id: w.id,
+          label: w.name || w.label || "Ví chính",
+          balance: typeof w.balance === "number" ? w.balance : 0,
+          accent: C.gold,
+        }))
+      : wallets;
+
+    const cloudTxs: Transaction[] = Array.isArray(bootstrapData.transactions)
+      ? bootstrapData.transactions.map((t: any) => ({
+          id: t.id,
+          name: t.name || t.category || "Giao dịch",
+          date: t.date || new Date().toISOString(),
+          amount: typeof t.amount === "number" ? t.amount : 0,
+          category: t.category || "General",
+          walletId: t.wallet?.id || 1,
+        }))
+      : transactions;
+
+    const cloudGoals: SavingsGoal[] = Array.isArray(bootstrapData.savingsGoals)
+      ? bootstrapData.savingsGoals.map((g: any) => ({
+          id: g.id,
+          title: g.title,
+          targetAmount: Number(g.targetAmount) || 0,
+          currentAmount: Number(g.currentAmount) || 0,
+          icon: g.icon || "PiggyBank",
+          color: g.color || C.gold,
+          deadline: g.deadline || "",
+          status: g.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
+        }))
+      : savingsGoals;
+
+    let totalB = budget;
+    let catBMap = categoryBudgets;
+
+    if (Array.isArray(bootstrapData.budgets) && bootstrapData.budgets.length > 0) {
+      let cloudTotal = 0;
+      const cloudCatMap: Record<string, number> = {};
+      bootstrapData.budgets.forEach((b: any) => {
+        if (b.category === "TOTAL") {
+          cloudTotal = Number(b.amount) || 0;
+        } else {
+          cloudCatMap[b.category] = Number(b.amount) || 0;
+        }
+      });
+      if (cloudTotal > 0) totalB = cloudTotal;
+      if (Object.keys(cloudCatMap).length > 0) catBMap = cloudCatMap;
+    }
+
+    return {
+      wallets: cloudWallets,
+      transactions: cloudTxs,
+      savingsGoals: cloudGoals,
+      budget: totalB,
+      categoryBudgets: catBMap,
     };
   }, [session?.access_token]);
+
+  // Use Generic SWR Custom Hook with Cross-Device revalidateOnFocus
+  const { data: syncData, isLoading, mutate: revalidateApp } = useSyncData<AppCacheData | null>(
+    "wealthy_offline_cache",
+    fetchBootstrapData,
+    {
+      fallbackData: {
+        wallets: initialCache?.wallets?.length ? initialCache.wallets : initialWallets,
+        transactions: initialCache?.transactions?.length ? initialCache.transactions : initialTransactions,
+        savingsGoals: initialCache?.savingsGoals || [],
+        budget: getInitialBudget(),
+        categoryBudgets: getInitialCategoryBudgets(),
+      },
+      revalidateOnFocus: true,
+    }
+  );
+
+  // Sync SWR Data to local Component States when data revalidates
+  useEffect(() => {
+    if (syncData) {
+      if (syncData.wallets?.length) setWallets(syncData.wallets);
+      if (syncData.transactions) setTransactions(syncData.transactions);
+      if (syncData.savingsGoals) setSavingsGoals(syncData.savingsGoals);
+      if (syncData.budget > 0) setBudget(syncData.budget);
+      if (syncData.categoryBudgets) setCategoryBudgets(syncData.categoryBudgets);
+    }
+  }, [syncData]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -1326,19 +1340,23 @@ export default function App() {
                 catBMap[b.category] = Number(b.amount) || 0;
               }
             });
-            setBudget(totalB);
-            setCategoryBudgets(catBMap);
+            const finalTotal = totalB > 0 ? totalB : newBudget;
+            const finalCats = Object.keys(catBMap).length > 0 ? catBMap : newCats;
 
-            // Update SWR cache so reloading instantly loads new budget
+            setBudget(finalTotal);
+            setCategoryBudgets(finalCats);
+
+            // Update SWR cache and trigger revalidation
             try {
               const currentCache = getOfflineCache() || {};
               localStorage.setItem("wealthy_offline_cache", JSON.stringify({
                 ...currentCache,
-                budget: totalB,
-                categoryBudgets: catBMap,
+                budget: finalTotal,
+                categoryBudgets: finalCats,
               }));
-              localStorage.setItem("wealthy_v2_budget", totalB.toString());
-              localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(catBMap));
+              localStorage.setItem("wealthy_v2_budget", finalTotal.toString());
+              localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(finalCats));
+              revalidateApp();
             } catch (e) {
               console.error("[Cache] Failed to update budget cache:", e);
             }
