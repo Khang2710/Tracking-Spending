@@ -51,6 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isSynced = false;
+
+    const triggerSyncOnce = (token: string) => {
+      if (isSynced) return;
+      isSynced = true;
+      syncLocalDataToCloud(token).catch((err) =>
+        console.error("[Auth] Bulk sync error:", err)
+      );
+    };
+
     // Lấy session hiện tại (supabase-js tự persist trong localStorage)
     supabase.auth
       .getSession()
@@ -64,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
 
         if (data.session?.access_token) {
-          syncLocalDataToCloud(data.session.access_token);
+          triggerSyncOnce(data.session.access_token);
         }
       })
       .catch((err) => {
@@ -84,8 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newSession?.user ?? null);
       setLoading(false);
 
-      if (newSession?.access_token) {
-        syncLocalDataToCloud(newSession.access_token);
+      if (event === "SIGNED_IN" && newSession?.access_token) {
+        triggerSyncOnce(newSession.access_token);
       }
     });
 

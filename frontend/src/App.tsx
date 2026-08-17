@@ -817,11 +817,21 @@ export default function App() {
   // Sync SWR Data to local Component States when data revalidates
   useEffect(() => {
     if (syncData) {
-      if (syncData.wallets?.length) setWallets(syncData.wallets);
-      if (syncData.transactions) setTransactions(syncData.transactions);
-      if (syncData.savingsGoals) setSavingsGoals(syncData.savingsGoals);
-      if (syncData.budget > 0) setBudget(syncData.budget);
-      if (syncData.categoryBudgets) setCategoryBudgets(syncData.categoryBudgets);
+      if (syncData.wallets?.length) {
+        setWallets(syncData.wallets);
+      }
+      if (syncData.transactions) {
+        setTransactions(syncData.transactions);
+      }
+      if (syncData.savingsGoals) {
+        setSavingsGoals(syncData.savingsGoals);
+      }
+      if (typeof syncData.budget === "number" && syncData.budget > 0) {
+        setBudget((prev) => (syncData.budget > 0 ? syncData.budget : prev));
+      }
+      if (syncData.categoryBudgets && Object.keys(syncData.categoryBudgets).length > 0) {
+        setCategoryBudgets(syncData.categoryBudgets);
+      }
     }
   }, [syncData]);
 

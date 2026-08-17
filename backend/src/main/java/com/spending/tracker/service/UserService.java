@@ -43,13 +43,15 @@ public class UserService {
             return existing;
         }
 
-        // 2. Fallback: Check if user exists by email (e.g. multi-device or OAuth link)
+        // 2. Fallback: Check if user exists by email (only link if auth_id is null/blank to prevent hijacking)
         if (email != null && !email.isBlank() && !email.endsWith("@placeholder.supabase")) {
             Optional<User> userByEmail = userRepository.findByEmail(email);
             if (userByEmail.isPresent()) {
                 User existing = userByEmail.get();
-                existing.setAuthId(authId);
-                return userRepository.save(existing);
+                if (existing.getAuthId() == null || existing.getAuthId().isBlank() || existing.getAuthId().equals(authId)) {
+                    existing.setAuthId(authId);
+                    return userRepository.save(existing);
+                }
             }
         }
 
