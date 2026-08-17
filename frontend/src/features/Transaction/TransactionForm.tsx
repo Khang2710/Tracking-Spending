@@ -236,8 +236,10 @@ export function AddTransactionForm({
     const rawAmt = parseFloat(amount);
     if (isNaN(rawAmt) || rawAmt <= 0) return;
 
+    const MAX_ALLOWED_TRANSACTION = 1_000_000_000_000;
     const numAmt = currency === "USD" ? Math.round(rawAmt * exchangeRate) : Math.round(rawAmt);
-    const finalAmount = type === "outcome" ? -numAmt : numAmt;
+    const clampedAmt = Math.min(numAmt, MAX_ALLOWED_TRANSACTION);
+    const finalAmount = type === "outcome" ? -clampedAmt : clampedAmt;
     const [year, month, day] = date.split("-");
     const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
 

@@ -248,6 +248,15 @@ export default function AssignBill({
 
     const calculatedGrandTotal = Math.max(0, calculatedSubtotal - dVnd + totalTaxVnd + tVnd + sVnd);
 
+    // Adjust rounding remainder to ensure sum(debts) equals grandTotal exactly
+    const sumRoundedDebts = calculatedDebts.reduce((sum, d) => sum + d.total, 0);
+    const debtDiff = calculatedGrandTotal - sumRoundedDebts;
+    if (debtDiff !== 0 && calculatedDebts.length > 0) {
+      const payerIndex = calculatedDebts.findIndex((d) => d.name === activePayer);
+      const targetIdx = payerIndex !== -1 ? payerIndex : 0;
+      calculatedDebts[targetIdx].total = Math.max(0, calculatedDebts[targetIdx].total + debtDiff);
+    }
+
     return {
       debts: calculatedDebts,
       subtotal: calculatedSubtotal,
@@ -257,7 +266,7 @@ export default function AssignBill({
       serviceChargeVnd: sVnd,
       discountVnd: dVnd,
     };
-  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency, exchangeRate]);
+  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency, exchangeRate, activePayer]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";

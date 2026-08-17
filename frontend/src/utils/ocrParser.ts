@@ -10,22 +10,26 @@ const LEADING_CHARS_REGEX = /^[\d\s.\-*]+/;
  * Normalizes price values extracted from raw AI text or inputs into pure Numbers.
  * Handles Vietnamese thousand separators (e.g. 9.000 -> 9000, 56.000 -> 56000, 3.565.000 -> 3565000).
  */
-export function parsePriceHelper(rawPrice: any): number {
+export function parsePriceHelper(rawPrice: any, allowNegative = false): number {
   if (typeof rawPrice === "number" && !isNaN(rawPrice) && isFinite(rawPrice)) {
-    return Math.abs(rawPrice);
+    return allowNegative ? rawPrice : Math.abs(rawPrice);
   }
   if (!rawPrice) return 0;
 
   const strP = String(rawPrice).trim();
-  if (/^\d+$/.test(strP)) {
-    return parseFloat(strP) || 0;
+  const isNegative = strP.startsWith("-");
+
+  if (/^-?\d+$/.test(strP)) {
+    const parsed = parseFloat(strP) || 0;
+    return allowNegative && isNegative ? -Math.abs(parsed) : Math.abs(parsed);
   }
 
   // 1. Look for formatted thousand numbers (e.g. 9.000, 56.000, 3.565.000)
   const thousandMatch = strP.match(THOUSAND_REGEX);
   if (thousandMatch) {
     const cleanVnd = thousandMatch[0].replace(/[.,]/g, "");
-    return parseFloat(cleanVnd) || 0;
+    const parsed = parseFloat(cleanVnd) || 0;
+    return allowNegative && isNegative ? -Math.abs(parsed) : Math.abs(parsed);
   }
 
   // 2. Extract number sequence
@@ -37,14 +41,14 @@ export function parsePriceHelper(rawPrice: any): number {
   // Handle standard decimal formats like 1,234.56 or 15.5
   if (DECIMAL_DOT_REGEX.test(numStr)) {
     numStr = numStr.replace(/,/g, "");
-    return parseFloat(numStr) || 0;
   } else if (DECIMAL_COMMA_REGEX.test(numStr)) {
     numStr = numStr.replace(/\./g, "").replace(",", ".");
-    return parseFloat(numStr) || 0;
+  } else {
+    numStr = numStr.replace(/[.,]/g, "");
   }
 
-  const cleanVnd = numStr.replace(/[.,]/g, "");
-  return parseFloat(cleanVnd) || 0;
+  const parsed = parseFloat(numStr) || 0;
+  return allowNegative && isNegative ? -Math.abs(parsed) : Math.abs(parsed);
 }
 
 /**

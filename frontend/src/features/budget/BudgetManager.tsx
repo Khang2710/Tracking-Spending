@@ -85,11 +85,14 @@ export default function BudgetManager({
     }
   }
 
+  const MAX_ALLOWED_BUDGET = 1_000_000_000_000;
+
   const parseAmount = (v: string) => {
     const trimmed = v.trim();
     if (trimmed === "") return 0;
     const n = parseFloat(trimmed);
-    return isNaN(n) || n < 0 ? 0 : n;
+    if (isNaN(n) || n < 0) return 0;
+    return Math.min(n, MAX_ALLOWED_BUDGET);
   };
 
   const colorFor = (spent: number, limit: number) => {

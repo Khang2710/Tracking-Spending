@@ -20,70 +20,13 @@ export interface ProcessReceiptOptions {
   onProgress?: (percent: number, statusText: string) => void;
 }
 
-export function parsePriceHelper(rawPrice: unknown): number {
-  if (typeof rawPrice === "number" && !isNaN(rawPrice) && isFinite(rawPrice)) {
-    return Math.abs(rawPrice);
-  }
-  if (!rawPrice) return 0;
+import { parsePriceHelper as utilParsePriceHelper, parseRawReceiptText as utilParseRawReceiptText } from "../utils/ocrParser";
 
-  const strP = String(rawPrice).trim();
-
-  // Pure integer string like "56000" or "13"
-  if (/^\d+$/.test(strP)) {
-    return parseFloat(strP) || 0;
-  }
-
-  // Pure decimal string like "13.00", "3.50", "34.61"
-  if (/^\d+\.\d{1,2}$/.test(strP)) {
-    return parseFloat(strP) || 0;
-  }
-
-  // Check decimal currency pattern with 1 or 2 decimals (e.g. $13.00, 3.50, 123.45)
-  if (/\.\d{1,2}$/.test(strP) && !/\.\d{3}$/.test(strP)) {
-    const cleanStr = strP.replace(/,/g, "").replace(/[^0-9.]/g, "");
-    const parsed = parseFloat(cleanStr);
-    if (!isNaN(parsed)) return parsed;
-  }
-
-  const thousandMatch = strP.match(/\b\d{1,3}(?:[.,]\d{3})+\b/);
-  if (thousandMatch) {
-    const cleanVnd = thousandMatch[0].replace(/[.,]/g, "");
-    return parseFloat(cleanVnd) || 0;
-  }
-
-  const numMatch = strP.match(/\d+(?:[.,]\d+)*/);
-  if (!numMatch) return 0;
-
-  let numStr = numMatch[0];
-
-  if (/\.\d{1,2}$/.test(numStr)) {
-    numStr = numStr.replace(/,/g, "");
-    return parseFloat(numStr) || 0;
-  } else if (/,\d{1,2}$/.test(numStr)) {
-    numStr = numStr.replace(/\./g, "").replace(",", ".");
-    return parseFloat(numStr) || 0;
-  }
-
-  const cleanVnd = numStr.replace(/[.,]/g, "");
-  return parseFloat(cleanVnd) || 0;
-}
+export const parsePriceHelper = utilParsePriceHelper;
 
 export function parseRawReceiptText(rawReceipt: string, defaultName = "Món ăn"): OcrParsedItem[] {
-  const lines = rawReceipt.split("\n");
-  const parsedItems: OcrParsedItem[] = [];
-
-  lines.forEach((line) => {
-    const match = line.match(/(.*?)\$?(\d+(?:\.\d{1,2})?)\s*$/);
-    if (match) {
-      const name = match[1].trim().replace(/^[\d\s.\-*]+/, "") || defaultName;
-      const price = parseFloat(match[2]);
-      if (name && !isNaN(price)) {
-        parsedItems.push({ name, price });
-      }
-    }
-  });
-
-  return parsedItems;
+  const items = utilParseRawReceiptText(rawReceipt);
+  return items.map((i) => ({ ...i, name: i.name || defaultName }));
 }
 
 async function fetchWithTimeout(
@@ -340,9 +283,17 @@ export async function processReceiptOcr(options: ProcessReceiptOptions): Promise
       if (response.ok) {
         const result = await response.json();
         const rawContent = result.choices?.[0]?.message?.content || "";
-        const cleanText = rawContent
-          .replace(/<think>[\s\S]*?<\/think>/gi, "")
-          .replace(/```json/g, "")
+        let cleanText = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "");
+        if (cleanText.includes("<think>")) {
+          const jsonStartIdx = Math.max(cleanText.indexOf("{"), cleanText.indexOf("["));
+          if (jsonStartIdx !== -1) {
+            cleanText = cleanText.substring(jsonStartIdx);
+          } else {
+            cleanText = cleanText.replace(/<think>[\s\S]*/gi, "");
+          }
+        }
+        cleanText = cleanText
+          .replace(/```json/gi, "")
           .replace(/```/g, "")
           .trim();
 
