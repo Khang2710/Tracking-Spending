@@ -45,7 +45,7 @@ export default function AssignBill({
   onDeleteGroup,
 }: AssignBillProps) {
   const { t } = useTranslation();
-  const { formatCurrency, currency, setCurrency } = useCurrency();
+  const { formatCurrency, currency, setCurrency, exchangeRate } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(0);
@@ -67,18 +67,19 @@ export default function AssignBill({
 
   const handleItemsParsed = (parsedItems: OcrParsedItem[]) => {
     let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-    const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
-      id: nextId++,
-      name: item.name,
-      price: item.price,
-      consumers: [],
-    }));
-    setItems((prev) => [...prev, ...newSplitItems]);
 
     // Dynamic Currency Switching: Always update currency state to match the scanned receipt
     const isUsdReceipt = parsedItems.some(
       (it) => it.currency === "USD" || (it.price > 0 && it.price < 500 && it.price % 1 !== 0)
     ) || (parsedItems.length > 0 && parsedItems.every((it) => it.price > 0 && it.price < 500));
+
+    const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
+      id: nextId++,
+      name: item.name,
+      price: isUsdReceipt ? Math.round(item.price * exchangeRate) : Math.round(item.price),
+      consumers: [],
+    }));
+    setItems((prev) => [...prev, ...newSplitItems]);
 
     if (isUsdReceipt) {
       setCurrency("USD");
@@ -105,8 +106,10 @@ export default function AssignBill({
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim() || !newItemPrice) return;
-    const price = parseFloat(newItemPrice);
-    if (isNaN(price) || price < 0) return;
+    const rawPrice = parseFloat(newItemPrice);
+    if (isNaN(rawPrice) || rawPrice < 0) return;
+
+    const price = currency === "USD" ? Math.round(rawPrice * exchangeRate) : Math.round(rawPrice);
 
     const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
     setItems((prev) => [
@@ -185,7 +188,7 @@ export default function AssignBill({
     );
   };
 
-  const { debts, subtotal, totalTax, grandTotal } = useMemo(() => {
+  const { debts, subtotal, totalTax, grandTotal, tipVnd, serviceChargeVnd, discountVnd } = useMemo(() => {
     const allParticipants = [myName, ...friends];
     const numPeople = allParticipants.length;
     const itemShares: Record<string, number> = {};
@@ -210,24 +213,27 @@ export default function AssignBill({
 
     const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
 
-    // Tax is flat absolute dollar value in USD mode, percentage in VND mode
-    const calculatedTotalTax = currency === "USD" 
-      ? taxPercent 
+    const totalTaxVnd = currency === "USD" 
+      ? Math.round(taxPercent * exchangeRate)
       : calculatedSubtotal * (taxPercent / 100);
 
-    const tipShare = numPeople > 0 ? tip / numPeople : 0;
-    const serviceChargeShare = numPeople > 0 ? serviceCharge / numPeople : 0;
+    const tVnd = currency === "USD" ? Math.round(tip * exchangeRate) : Math.round(tip);
+    const sVnd = currency === "USD" ? Math.round(serviceCharge * exchangeRate) : Math.round(serviceCharge);
+    const dVnd = currency === "USD" ? Math.round(discount * exchangeRate) : Math.round(discount);
+
+    const tipShare = numPeople > 0 ? tVnd / numPeople : 0;
+    const serviceChargeShare = numPeople > 0 ? sVnd / numPeople : 0;
 
     const calculatedDebts = allParticipants.map((p) => {
       const assignedItemCost = itemShares[p] || 0;
       const personalItemCost = assignedItemCost + sharedAmountPerPerson;
 
-      const discountShare = currency === "USD" || discount > 0
-        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * discount : (numPeople > 0 ? discount / numPeople : 0))
+      const discountShare = dVnd > 0
+        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * dVnd : (numPeople > 0 ? dVnd / numPeople : 0))
         : 0;
 
       const personalTax = currency === "USD"
-        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * calculatedTotalTax : (numPeople > 0 ? calculatedTotalTax / numPeople : 0))
+        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * totalTaxVnd : (numPeople > 0 ? totalTaxVnd / numPeople : 0))
         : personalItemCost * (taxPercent / 100);
 
       const totalDue = Math.max(0, personalItemCost - discountShare + personalTax + tipShare + serviceChargeShare);
@@ -236,19 +242,22 @@ export default function AssignBill({
         itemCost: personalItemCost,
         tax: personalTax,
         discountShare,
-        total: Math.round(totalDue * 100) / 100,
+        total: Math.round(totalDue),
       };
     });
 
-    const calculatedGrandTotal = Math.max(0, calculatedSubtotal - discount + calculatedTotalTax + tip + serviceCharge);
+    const calculatedGrandTotal = Math.max(0, calculatedSubtotal - dVnd + totalTaxVnd + tVnd + sVnd);
 
     return {
       debts: calculatedDebts,
       subtotal: calculatedSubtotal,
-      totalTax: calculatedTotalTax,
+      totalTax: totalTaxVnd,
       grandTotal: calculatedGrandTotal,
+      tipVnd: tVnd,
+      serviceChargeVnd: sVnd,
+      discountVnd: dVnd,
     };
-  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency]);
+  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency, exchangeRate]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -807,10 +816,10 @@ export default function AssignBill({
                 <span>{t("split.itemsSubtotal")}:</span>
                 <span className="font-mono font-bold text-white">{formatCurrency(subtotal)}</span>
               </div>
-              {discount > 0 && (
+              {discountVnd > 0 && (
                 <div className="flex justify-between text-green">
                   <span>{t("split.discountLabel") || t("split.discount_label") || "Discount"}:</span>
-                  <span className="font-mono font-bold">-{formatCurrency(discount)}</span>
+                  <span className="font-mono font-bold">-{formatCurrency(discountVnd)}</span>
                 </div>
               )}
               <div className="flex justify-between text-tm">
@@ -819,12 +828,12 @@ export default function AssignBill({
               </div>
               <div className="flex justify-between text-tm">
                 <span>{t("split.flatTip")}:</span>
-                <span className="font-mono font-bold text-white">{formatCurrency(tip)}</span>
+                <span className="font-mono font-bold text-white">{formatCurrency(tipVnd)}</span>
               </div>
-              {serviceCharge > 0 && (
+              {serviceChargeVnd > 0 && (
                 <div className="flex justify-between text-tm">
                   <span>{t("split.serviceFee") || t("split.service_fee") || "Service Charge"}:</span>
-                  <span className="font-mono font-bold text-white">{formatCurrency(serviceCharge)}</span>
+                  <span className="font-mono font-bold text-white">{formatCurrency(serviceChargeVnd)}</span>
                 </div>
               )}
 

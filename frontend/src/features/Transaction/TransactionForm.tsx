@@ -208,7 +208,7 @@ export function AddTransactionForm({
   onAdd: (tx: Omit<Transaction, "id">, walletId: number) => void;
 }) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { currency, exchangeRate, formatCurrency } = useCurrency();
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -233,9 +233,10 @@ export function AddTransactionForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !amount) return;
-    const numAmt = parseFloat(amount);
-    if (isNaN(numAmt) || numAmt <= 0) return;
-    
+    const rawAmt = parseFloat(amount);
+    if (isNaN(rawAmt) || rawAmt <= 0) return;
+
+    const numAmt = currency === "USD" ? Math.round(rawAmt * exchangeRate) : Math.round(rawAmt);
     const finalAmount = type === "outcome" ? -numAmt : numAmt;
     const [year, month, day] = date.split("-");
     const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
@@ -298,7 +299,7 @@ export function AddTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.amount", "Số tiền")}
+          {t("dashboard.amount", "Số tiền")} ({currency})
         </label>
         <input
           type="number"
@@ -397,10 +398,19 @@ export function EditTransactionForm({
   onDelete?: (id: number) => void;
 }) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { currency, exchangeRate, formatCurrency } = useCurrency();
 
   const [name, setName] = useState(transaction.name);
-  const [amount, setAmount] = useState(String(Math.abs(transaction.amount)));
+
+  const initialDisplayAmount = () => {
+    const absVnd = Math.abs(transaction.amount);
+    if (currency === "USD") {
+      return Number((absVnd / exchangeRate).toFixed(2)).toString();
+    }
+    return String(absVnd);
+  };
+
+  const [amount, setAmount] = useState(initialDisplayAmount);
   const [type, setType] = useState<"income" | "outcome">(
     transaction.amount < 0 ? "outcome" : "income"
   );
@@ -427,9 +437,10 @@ export function EditTransactionForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !amount) return;
-    const numAmt = parseFloat(amount);
-    if (isNaN(numAmt) || numAmt <= 0) return;
+    const rawAmt = parseFloat(amount);
+    if (isNaN(rawAmt) || rawAmt <= 0) return;
 
+    const numAmt = currency === "USD" ? Math.round(rawAmt * exchangeRate) : Math.round(rawAmt);
     const finalAmount = type === "outcome" ? -numAmt : numAmt;
     const [year, month, day] = date.split("-");
     const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;

@@ -19,9 +19,11 @@ import {
   UtensilsCrossed,
   Coffee,
   ShoppingBasket,
+  Mail,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { toast, Toaster } from "sonner";
+import { useAuth } from "./contexts/AuthContext";
 import SplitScreen from "./features/split-bill/SplitScreen";
 import Dashboard from "./features/dashboard/Dashboard";
 import WalletManager, { WalletDialog } from "./features/wallet/WalletManager";
@@ -639,97 +641,140 @@ function EditProfileForm({
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const { t } = useTranslation();
+  const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // User Onboarding State
+  // User Onboarding State (tên hiển thị tùy chỉnh, override tên từ auth)
   const [userName, setUserName] = useState<string>(() => {
     return localStorage.getItem("wealthy_user_name") || "";
   });
 
-  // States with localStorage Sync
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_transactions");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.error("Error reading transactions from localStorage", e);
-    }
-    return initialTransactions;
-  });
+  // Tên hiển thị: custom name > OAuth full_name > email prefix > "User"
+  const authDisplayName =
+    (user?.user_metadata?.full_name as string | undefined)?.trim() ||
+    user?.email?.split("@")[0] ||
+    "";
+  const displayName = userName || authDisplayName || "User";
 
-  const [wallets, setWallets] = useState<Wallet[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_wallets");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error("Error reading wallets from localStorage", e);
-    }
-    return initialWallets;
-  });
+  // Data Loading & API Sync States
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_savings_goals");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Filter out old demo sample goals if present
-          const cleanGoals = parsed.filter(
-            (g: any) => g?.title !== "Buy Tesla Model 3" && g?.title !== "Emergency Fund"
-          );
-          return cleanGoals.map((g: any, i: number) => ({
-            id: typeof g?.id === "number" ? g.id : i + 1,
-            title: g?.title || "Hũ " + (i + 1),
-            targetAmount: typeof g?.targetAmount === "number" ? g.targetAmount : Number(g?.targetAmount) || 0,
-            currentAmount: typeof g?.currentAmount === "number" ? g.currentAmount : Number(g?.currentAmount) || 0,
-            icon: g?.icon || "PiggyBank",
-            color: g?.color || C.gold,
-            deadline: g?.deadline || "",
-            status: g?.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
-          }));
+  // States initialized from API / fallback
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [wallets, setWallets] = useState<Wallet[]>(initialWallets);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+
+  const { session } = useAuth();
+  const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:8080";
+
+  // Fetch initial data from Spring Boot REST API when authenticated
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCloudData() {
+      if (!session?.access_token) {
+        setIsLoading(false);
+        return;
+      }
+
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      };
+
+      try {
+        // 1. Fetch Wallets
+        const walletRes = await fetch(`${BACKEND_URL}/api/wallets`, { headers });
+        if (walletRes.ok) {
+          const cloudWallets = await walletRes.json();
+          if (Array.isArray(cloudWallets) && cloudWallets.length > 0 && isMounted) {
+            setWallets(
+              cloudWallets.map((w: any) => ({
+                id: w.id,
+                label: w.name || w.label || "Ví chính",
+                balance: typeof w.balance === "number" ? w.balance : 0,
+                accent: C.gold,
+              }))
+            );
+          }
         }
-      }
-    } catch (e) {
-      console.error("Error reading savings goals from localStorage", e);
-    }
-    return [];
-  });
 
-  const [budget, setBudget] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_budget");
-      if (saved !== null) {
-        const num = Number(saved);
-        if (!isNaN(num) && num >= 0) {
-          if (num === 1000000 || num === 1000 || num === 820) return 0;
-          return num;
+        // 2. Fetch Transactions
+        const txRes = await fetch(`${BACKEND_URL}/api/transactions`, { headers });
+        if (txRes.ok) {
+          const cloudTxs = await txRes.json();
+          if (Array.isArray(cloudTxs) && isMounted) {
+            setTransactions(
+              cloudTxs.map((t: any) => ({
+                id: t.id,
+                name: t.name || t.category || "Giao dịch",
+                date: t.date || new Date().toISOString(),
+                amount: typeof t.amount === "number" ? t.amount : 0,
+                category: t.category || "General",
+                walletId: t.wallet?.id || 1,
+              }))
+            );
+          }
         }
-      }
-    } catch (e) {
-      console.error("Error reading budget from localStorage", e);
-    }
-    return 0;
-  });
 
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_category_budgets");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+        // 3. Fetch Savings Goals
+        const goalRes = await fetch(`${BACKEND_URL}/api/savings-goals`, { headers });
+        if (goalRes.ok) {
+          const cloudGoals = await goalRes.json();
+          if (Array.isArray(cloudGoals) && isMounted) {
+            setSavingsGoals(
+              cloudGoals.map((g: any) => ({
+                id: g.id,
+                title: g.title,
+                targetAmount: Number(g.targetAmount) || 0,
+                currentAmount: Number(g.currentAmount) || 0,
+                icon: g.icon || "PiggyBank",
+                color: g.color || C.gold,
+                deadline: g.deadline || "",
+                status: g.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
+              }))
+            );
+          }
+        }
+
+        // 4. Fetch Budgets for Current Month
+        const currentMonthStr = new Date().toISOString().slice(0, 7);
+        const budgetRes = await fetch(`${BACKEND_URL}/api/budgets?month=${currentMonthStr}`, { headers });
+        if (budgetRes.ok) {
+          const cloudBudgets = await budgetRes.json();
+          if (Array.isArray(cloudBudgets) && isMounted) {
+            let totalB = 0;
+            const catBMap: Record<string, number> = {};
+
+            cloudBudgets.forEach((b: any) => {
+              if (b.category === "TOTAL") {
+                totalB = Number(b.amount) || 0;
+              } else {
+                catBMap[b.category] = Number(b.amount) || 0;
+              }
+            });
+
+            setBudget(totalB);
+            setCategoryBudgets(catBMap);
+          }
+        }
+      } catch (err) {
+        console.error("[CloudData] Error fetching REST API data:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-    } catch (e) {
-      console.error("Error reading category budgets from localStorage", e);
     }
-    return {};
-  });
+
+    loadCloudData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.access_token]);
+
+  const [budget, setBudget] = useState<number>(0);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -748,33 +793,7 @@ export default function App() {
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
 
   // Track transaction IDs applied to wallet balances
-  const [appliedTxIds, setAppliedTxIds] = useState<number[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_applied_tx_ids");
-      if (saved) return JSON.parse(saved);
-      const existingSavedTxs = localStorage.getItem("wealthy_v2_transactions");
-      if (existingSavedTxs) {
-        const parsed: Transaction[] = JSON.parse(existingSavedTxs);
-        if (Array.isArray(parsed)) {
-          // Non-SplitBill transactions like "cơm" were already applied to wallet balance
-          return parsed.filter((t) => !t.name.startsWith("Chia bill")).map((t) => t.id);
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem("wealthy_v2_transactions", JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem("wealthy_v2_wallets", JSON.stringify(wallets));
-  }, [wallets]);
-
-  useEffect(() => {
-    localStorage.setItem("wealthy_v2_savings_goals", JSON.stringify(savingsGoals));
-  }, [savingsGoals]);
+  const [appliedTxIds, setAppliedTxIds] = useState<number[]>([]);
 
   useEffect(() => {
     localStorage.setItem("wealthy_v2_budget", budget.toString());
@@ -1053,8 +1072,17 @@ export default function App() {
       onDeleteTransaction={handleDeleteTransaction}
       onEditTransaction={handleEditTxClick}
     />,
-    <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />,
+    <SplitScreen userName={displayName} onAddTransaction={handleAddTransaction} />,
   ];
+
+  if (isLoading && user) {
+    return (
+      <div className="min-h-screen bg-[#0F0F10] flex flex-col items-center justify-center text-white gap-3 font-sans">
+        <div className="w-8 h-8 border-2 border-[#C9A45B] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-[#8A8A8A] font-medium">Đang đồng bộ dữ liệu từ máy chủ...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1069,7 +1097,7 @@ export default function App() {
 
       <div className="flex h-[100dvh] w-full bg-[#0A0A0A] text-white overflow-hidden relative">
         {/* Desktop Sidebar */}
-        <Sidebar active={activeTab} onChange={setActiveTab} userName={userName} onEditName={handleEditName} />
+        <Sidebar active={activeTab} onChange={setActiveTab} userName={displayName} onEditName={handleEditName} />
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col h-full md:pl-64 overflow-y-auto w-full pb-20 md:pb-0 hide-scroll">
@@ -1093,7 +1121,7 @@ export default function App() {
                   className="text-base md:text-2xl font-bold cursor-pointer hover:text-gold transition-colors flex items-center gap-1.5 truncate text-white"
                   onClick={handleEditName}
                 >
-                  <span className="truncate">{t("dashboard.welcome")}, {userName || "User"}</span> 👋
+                  <span className="truncate">{t("dashboard.welcome")}, {displayName}</span> 👋
                 </h2>
               </div>
             </div>
@@ -1195,13 +1223,31 @@ export default function App() {
       {/* Edit Profile Modal */}
       <Modal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit Profile">
         <EditProfileForm
-          initialName={userName}
+          initialName={userName || authDisplayName}
           onSave={(newName) => {
             setUserName(newName);
             localStorage.setItem("wealthy_user_name", newName);
             setIsProfileModalOpen(false);
           }}
         />
+        {/* Signed-in account info + sign out */}
+        <div className="mt-5 pt-4 border-t" style={{ borderColor: C.border }}>
+          {user?.email && (
+            <p className="text-[11px] text-tm mb-3 flex items-center gap-1.5 font-sans truncate">
+              <Mail size={11} className="shrink-0" /> {user.email}
+            </p>
+          )}
+          <button
+            onClick={() => {
+              signOut();
+              localStorage.removeItem("wealthy_user_name");
+              setIsProfileModalOpen(false);
+            }}
+            className="w-full py-3 rounded-xl font-bold text-sm cursor-pointer transition-all bg-red-500/15 text-red hover:bg-red-500/25 border border-red-500/30"
+          >
+            {t("auth.logout", "Đăng xuất")}
+          </button>
+        </div>
       </Modal>
 
       {/* Edit Budget Modal */}
@@ -1211,9 +1257,52 @@ export default function App() {
         budget={budget}
         categoryBudgets={categoryBudgets}
         transactions={transactions}
-        onSave={(newBudget, newCats) => {
-          setBudget(newBudget);
-          setCategoryBudgets(newCats);
+        onSave={async (newBudget, newCats) => {
+          if (!session?.access_token) {
+            throw new Error("Bạn chưa đăng nhập");
+          }
+
+          const currentMonthStr = new Date().toISOString().slice(0, 7);
+          const res = await fetch(`${BACKEND_URL}/api/budgets`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              periodMonth: currentMonthStr,
+              totalBudget: newBudget,
+              categoryBudgets: newCats,
+            }),
+          });
+
+          if (!res.ok) {
+            const errBody = await res.text().catch(() => "");
+            let errMsg = `Lưu ngân sách lên PostgreSQL thất bại (${res.status})`;
+            try {
+              const parsed = JSON.parse(errBody);
+              if (parsed?.message) errMsg += `: ${parsed.message}`;
+            } catch (e) {
+              if (errBody) errMsg += `: ${errBody}`;
+            }
+            console.error(`[Budget] REST API failed with status ${res.status}:`, errBody);
+            throw new Error(errMsg);
+          }
+
+          const cloudBudgets = await res.json();
+          if (Array.isArray(cloudBudgets)) {
+            let totalB = 0;
+            const catBMap: Record<string, number> = {};
+            cloudBudgets.forEach((b: any) => {
+              if (b.category === "TOTAL") {
+                totalB = Number(b.amount) || 0;
+              } else {
+                catBMap[b.category] = Number(b.amount) || 0;
+              }
+            });
+            setBudget(totalB);
+            setCategoryBudgets(catBMap);
+          }
         }}
       />
 
@@ -1235,83 +1324,6 @@ export default function App() {
         }}
       />
 
-      {/* Onboarding Overlay */}
-      <AnimatePresence>
-        {!userName && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#080809]">
-            {/* Ambient Background Glow */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-              <div 
-                className="absolute top-[-20%] left-[-10%] w-[60%] aspect-square rounded-full filter blur-[120px]"
-                style={{ background: `radial-gradient(circle, ${C.gold} 0%, transparent 70%)` }}
-              />
-              <div 
-                className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full filter blur-[120px]"
-                style={{ background: `radial-gradient(circle, ${C.purple} 0%, transparent 70%)` }}
-              />
-            </div>
-
-            <motion.div
-              className="relative w-full max-w-md p-8 rounded-3xl border shadow-2xl text-center"
-              style={{ background: C.card, borderColor: C.border }}
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            >
-              <div
-                className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-xl font-bold mb-6"
-                style={{
-                  background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldL} 100%)`,
-                  color: C.bg,
-                }}
-              >
-                W
-              </div>
-
-              <h2 className="text-2xl font-bold text-white mb-2 font-sans tracking-tight">
-                Welcome to Wealthy
-              </h2>
-              <p className="text-sm text-tm mb-8">
-                Your luxury personal expense and portfolio assistant. Let's start by setting up your name.
-              </p>
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const target = e.target as HTMLFormElement;
-                  const nameInput = target.elements.namedItem("name") as HTMLInputElement;
-                  const val = nameInput.value.trim();
-                  if (val) {
-                    setUserName(val);
-                    localStorage.setItem("wealthy_user_name", val);
-                  }
-                }}
-                className="flex flex-col gap-4"
-              >
-                <div className="flex flex-col gap-2 text-left">
-                  <label className="text-xs text-tm font-medium uppercase tracking-wider pl-1">Your Name</label>
-                  <input
-                    type="text"
-                    name="name"
-                    required
-                    autoFocus
-                    placeholder="Enter your name..."
-                    className="w-full px-5 py-3.5 rounded-2xl outline-none border text-white bg-surf font-semibold transition-all focus:border-gold"
-                    style={{ borderColor: C.border }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-3.5 mt-2 rounded-2xl font-bold transition-all hover:brightness-110 cursor-pointer text-sm"
-                  style={{ background: C.gold, color: C.bg }}
-                >
-                  Get Started
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

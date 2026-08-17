@@ -683,6 +683,7 @@ function GoalActionModal({
   onDelete: (goalId: number) => void;
   onClose: () => void;
 }) {
+  const { currency, exchangeRate, formatCurrency } = useCurrency();
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
   const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
@@ -694,8 +695,9 @@ function GoalActionModal({
   const GoalIcon = resolveGoalIcon(goal?.icon || "PiggyBank");
 
   const handleSubmit = () => {
-    const num = parseFloat(amount);
-    if (isNaN(num) || num <= 0) return;
+    const rawNum = parseFloat(amount);
+    if (isNaN(rawNum) || rawNum <= 0) return;
+    const num = currency === "USD" ? Math.round(rawNum * exchangeRate) : Math.round(rawNum);
     if (mode === "deposit") {
       if (num > availableBalance) return;
       onDeposit(goal.id, num);
@@ -716,7 +718,7 @@ function GoalActionModal({
         <div className="flex-1">
           <p className="text-[15px] font-semibold" style={{ color: C.white }}>{goal?.title || "Mục tiêu"}</p>
           <p className="text-[12px]" style={{ color: C.tm }}>
-            ${currentAmount.toLocaleString()} / ${targetAmount.toLocaleString()} · {pct}%
+            {formatCurrency(currentAmount)} / {formatCurrency(targetAmount)} · {pct}%
           </p>
         </div>
       </div>
@@ -744,9 +746,7 @@ function GoalActionModal({
           {mode === "deposit" ? "Số dư khả dụng" : "Số dư trong hũ"}
         </span>
         <span className="text-[13px] font-bold" style={{ color: mode === "deposit" ? C.green : C.gold }}>
-          ${mode === "deposit"
-            ? (availableBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
-            : currentAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          {formatCurrency(mode === "deposit" ? (availableBalance || 0) : currentAmount)}
         </span>
       </div>
 
@@ -755,7 +755,7 @@ function GoalActionModal({
         className="flex items-center gap-3 px-4 py-3 rounded-2xl"
         style={{ background: C.surf, border: `1px solid ${C.border}` }}
       >
-        <span className="text-[18px] font-bold" style={{ color: C.tm }}>$</span>
+        <span className="text-[18px] font-bold" style={{ color: C.tm }}>{currency === "USD" ? "$" : "₫"}</span>
         <input
           type="number"
           placeholder="0.00"
@@ -767,8 +767,13 @@ function GoalActionModal({
         />
       </div>
 
-      {/* Validation error */}
-      {amount && parseFloat(amount) > (mode === "deposit" ? availableBalance : goal.currentAmount) && (
+      {/* Warning if amount exceeds available balance */}
+      {amount && currency === "USD" && parseFloat(amount) * exchangeRate > (mode === "deposit" ? availableBalance : currentAmount) && (
+        <p className="text-[12px]" style={{ color: C.red }}>
+          ⚠ Không đủ {mode === "deposit" ? "số dư khả dụng" : "số dư trong hũ"}
+        </p>
+      )}
+      {amount && currency === "VND" && parseFloat(amount) > (mode === "deposit" ? availableBalance : currentAmount) && (
         <p className="text-[12px]" style={{ color: C.red }}>
           ⚠ Không đủ {mode === "deposit" ? "số dư khả dụng" : "số dư trong hũ"}
         </p>
@@ -804,6 +809,7 @@ export function AddGoalModal({
 }: {
   onAdd: (goal: Omit<SavingsGoal, "id" | "status">) => void;
 }) {
+  const { currency, exchangeRate } = useCurrency();
   const [title, setTitle] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -813,8 +819,9 @@ export function AddGoalModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !targetAmount) return;
-    const num = parseFloat(targetAmount);
-    if (isNaN(num) || num <= 0) return;
+    const rawNum = parseFloat(targetAmount);
+    if (isNaN(rawNum) || rawNum <= 0) return;
+    const num = currency === "USD" ? Math.round(rawNum * exchangeRate) : Math.round(rawNum);
     onAdd({
       title,
       targetAmount: num,
@@ -884,12 +891,12 @@ export function AddGoalModal({
 
       {/* Target Amount */}
       <div className="flex flex-col gap-2">
-        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>SỐ TIỀN MỤC TIÊU</label>
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>SỐ TIỀN MỤC TIÊU ({currency})</label>
         <div
           className="flex items-center gap-2 px-4 py-3 rounded-xl"
           style={{ background: C.surf, border: `1px solid ${C.border}` }}
         >
-          <span style={{ color: C.tm }}>$</span>
+          <span style={{ color: C.tm }}>{currency === "USD" ? "$" : "₫"}</span>
           <input
             type="number"
             value={targetAmount}

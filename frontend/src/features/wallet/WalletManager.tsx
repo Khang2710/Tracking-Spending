@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { C, Modal } from "../../App";
 import type { Wallet } from "../../App";
+import { useCurrency } from "../../context/CurrencyContext";
 
 export type WalletDialog = { mode: "add" } | { mode: "edit"; wallet: Wallet } | null;
 
@@ -68,6 +69,7 @@ function AddWalletForm({
 }: {
   onAdd: (wallet: Omit<Wallet, "id">) => void;
 }) {
+  const { currency, exchangeRate } = useCurrency();
   const [label, setLabel] = useState("");
   const [balance, setBalance] = useState("");
   const [accent, setAccent] = useState<string>(C.purple);
@@ -86,9 +88,11 @@ function AddWalletForm({
     const numBal = parseFloat(balance);
     if (isNaN(numBal) || numBal < 0) return;
 
+    const vndBalance = currency === "USD" ? Math.round(numBal * exchangeRate) : Math.round(numBal);
+
     onAdd({
       label,
-      balance: numBal,
+      balance: vndBalance,
       accent,
     });
   };
@@ -109,7 +113,7 @@ function AddWalletForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Initial Balance ($)</label>
+        <label className="text-xs text-tm font-medium">Initial Balance ({currency})</label>
         <input
           type="number"
           step="0.01"
@@ -162,8 +166,17 @@ function EditWalletForm({
   onSave: (updated: Wallet) => void;
   onDelete?: (id: number) => void;
 }) {
+  const { currency, exchangeRate } = useCurrency();
   const [label, setLabel] = useState(wallet.label);
-  const [balance, setBalance] = useState(wallet.balance.toString());
+
+  const initialDisplayBalance = () => {
+    if (currency === "USD") {
+      return Number((wallet.balance / exchangeRate).toFixed(2)).toString();
+    }
+    return wallet.balance.toString();
+  };
+
+  const [balance, setBalance] = useState(initialDisplayBalance);
   const [accent, setAccent] = useState(wallet.accent);
 
   const colors = [
@@ -180,10 +193,12 @@ function EditWalletForm({
     const numBal = parseFloat(balance);
     if (isNaN(numBal)) return;
 
+    const vndBalance = currency === "USD" ? Math.round(numBal * exchangeRate) : Math.round(numBal);
+
     onSave({
       ...wallet,
       label,
-      balance: numBal,
+      balance: vndBalance,
       accent,
     });
   };
@@ -204,7 +219,7 @@ function EditWalletForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Balance ($)</label>
+        <label className="text-xs text-tm font-medium">Balance ({currency})</label>
         <input
           type="number"
           step="0.01"

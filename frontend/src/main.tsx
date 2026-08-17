@@ -1,6 +1,10 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App.tsx";
+import AuthScreen from "./features/auth/AuthScreen.tsx";
+import ProtectedRoute from "./components/ProtectedRoute.tsx";
+import { AuthProvider } from "./contexts/AuthContext.tsx";
 import "./styles/index.css";
 import "./i18n"; // Import i18n ở đây là chuẩn xác
 
@@ -77,9 +81,22 @@ if (rootElement) {
   createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <CurrencyProvider>
-          <App />
-        </CurrencyProvider>
+        <AuthProvider>
+          <CurrencyProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* Public: trang đăng nhập / đăng ký */}
+                <Route path="/login" element={<AuthScreen />} />
+                {/* Private: toàn bộ app chính nằm sau Auth Guard */}
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/" element={<App />} />
+                </Route>
+                {/* Mọi path lạ → về trang chủ (sẽ bị guard đẩy sang /login nếu chưa đăng nhập) */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </BrowserRouter>
+          </CurrencyProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );
