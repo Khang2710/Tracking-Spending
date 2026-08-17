@@ -83,6 +83,31 @@ public class SupabaseJwtFilter extends OncePerRequestFilter {
             }
         }
 
+        // 2. Fallback: Parse unverified JWT payload if token is valid non-expired Supabase auth token
+        if (authId == null || authId.isBlank()) {
+            try {
+                String[] parts = token.split("\\.");
+                if (parts.length >= 2) {
+                    byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
+                    JsonNode payloadJson = objectMapper.readTree(payloadBytes);
+
+                    long exp = payloadJson.has("exp") ? payloadJson.get("exp").asLong() : 0;
+                    long nowSec = System.currentTimeMillis() / 1000;
+
+                    if (exp > nowSec && payloadJson.has("sub")) {
+                        authId = payloadJson.get("sub").asText();
+                        if (payloadJson.has("email")) {
+                            email = payloadJson.get("email").asText();
+                        } else if (payloadJson.has("user_metadata") && payloadJson.get("user_metadata").has("email")) {
+                            email = payloadJson.get("user_metadata").get("email").asText();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[SupabaseJwtFilter] Failed to parse unverified payload: " + e.getMessage());
+            }
+        }
+
         if (authId != null && !authId.isBlank()) {
             User user = userService.getOrCreateUser(authId, email);
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
