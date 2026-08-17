@@ -72,9 +72,12 @@ public class SyncService {
         // 3. Savings Goals
         List<SavingsGoal> savingsGoals = savingsGoalRepository.findByUserId(userId);
 
-        // 4. Budgets for Current Month (YYYY-MM)
+        // 4. Budgets for Current Month (YYYY-MM) with Fallback to user's latest budget
         String currentMonthStr = LocalDate.now().toString().substring(0, 7);
         List<Budget> budgets = budgetRepository.findByUserIdAndPeriodMonth(userId, currentMonthStr);
+        if (budgets.isEmpty()) {
+            budgets = budgetRepository.findByUserId(userId);
+        }
 
         return new AppBootstrapData(wallets, transactions, savingsGoals, budgets);
     }
