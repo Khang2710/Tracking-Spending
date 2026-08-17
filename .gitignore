@@ -41,7 +41,9 @@ Dockerfile
 dist/
 build/
 .env*
+frontend/vercel.json
 
 #Note and checkpoint    
 Note.md
 TODO.md
+PROJECT_ARCHITECTURE_NOTEBOOKLM.md
