@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, CheckCircle2, ChevronRight, X, ArrowUpRight, ArrowDownRight, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, X, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import confetti from "canvas-confetti";
 import { C, Card } from "../../App";
@@ -14,7 +14,6 @@ interface TransactionRecord {
   amount: number;
   isLent: boolean; // true = they owe me, false = I owe them
   isSettled?: boolean;
-  owedTo?: string; // if set: this friend owes `amount` to a third party, not the current user
 }
 
 interface FriendBalanceItem {
@@ -82,7 +81,7 @@ export default function DebtBalances({
 
   return (
     <div className="px-5 md:px-0 max-w-2xl w-full mx-auto pb-10">
-      <DebtList balances={balances} onSelectFriend={handleOpenDetail} onRemoveFriend={onRemoveFriend} />
+      <DebtList balances={balances} onSelectFriend={handleOpenDetail} />
 
       {/* Detail Modal */}
       <AnimatePresence>
@@ -107,10 +106,9 @@ export default function DebtBalances({
 interface DebtListProps {
   balances: FriendBalanceItem[];
   onSelectFriend: (friend: FriendBalanceItem) => void;
-  onRemoveFriend: (name: string) => void;
 }
 
-function DebtList({ balances, onSelectFriend, onRemoveFriend }: DebtListProps) {
+function DebtList({ balances, onSelectFriend }: DebtListProps) {
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const getInitials = (name: string) => name.slice(0, 2).toUpperCase();
@@ -132,16 +130,9 @@ function DebtList({ balances, onSelectFriend, onRemoveFriend }: DebtListProps) {
           </div>
         ) : (
           balances.map((item) => {
-            const hasOwnBalance = item.balance !== 0;
             const isLent = item.balance > 0;
-            const outstandingOwedTo = (item.history || []).filter((h) => h.owedTo && !h.isSettled);
-            const owesThirdParty = outstandingOwedTo.length > 0;
-            const isSettled = !hasOwnBalance && !owesThirdParty;
-            const owedToNames = Array.from(new Set(outstandingOwedTo.map((h) => h.owedTo).filter(Boolean) as string[])).join(", ");
-            const absBalance = hasOwnBalance
-              ? Math.abs(item.balance)
-              : Math.round(outstandingOwedTo.reduce((sum, h) => sum + h.amount, 0) * 100) / 100;
-            const displayAmount = hasOwnBalance ? item.balance : absBalance;
+            const isSettled = item.balance === 0;
+            const absBalance = Math.abs(item.balance);
 
             return (
               <motion.div
@@ -171,13 +162,7 @@ function DebtList({ balances, onSelectFriend, onRemoveFriend }: DebtListProps) {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-white">{item.name}</p>
                   <p className="text-xs text-tm mt-0.5">
-                    {isSettled
-                      ? t("debt.allSettled")
-                      : hasOwnBalance
-                      ? isLent
-                        ? t("debt.youLent")
-                        : t("debt.youOwe")
-                      : `${t("debt.owesToAmount")} ${owedToNames}`}
+                    {isSettled ? t("debt.allSettled") : isLent ? t("debt.youLent") : t("debt.owesYou")}
                   </p>
                 </div>
 
@@ -198,7 +183,7 @@ function DebtList({ balances, onSelectFriend, onRemoveFriend }: DebtListProps) {
                       isSettled ? "text-tm" : isLent ? "text-green-500" : "text-red-500"
                     }`}
                   >
-                    {isSettled ? "" : formatCurrency(displayAmount)}
+                    {isSettled ? "" : formatCurrency(item.balance)}
                   </p>
                   <span
                     className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mt-1 ${
@@ -209,27 +194,9 @@ function DebtList({ balances, onSelectFriend, onRemoveFriend }: DebtListProps) {
                         : "bg-red-500/10 text-red-400"
                     }`}
                   >
-                    {isSettled
-                      ? t("debt.settled")
-                      : hasOwnBalance
-                      ? isLent
-                        ? t("debt.lent")
-                        : t("debt.youOwe")
-                      : t("debt.owed")}
+                    {isSettled ? t("debt.settled") : isLent ? t("debt.lent") : t("debt.owed")}
                   </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveFriend(item.name);
-                  }}
-                  className="p-2 rounded-lg text-tm hover:text-red hover:bg-red/10 transition-colors cursor-pointer bg-transparent border-0"
-                  title={t("debt.removeFriend")}
-                >
-                  <Trash2 size={16} />
-                </button>
 
                 <ChevronRight size={16} color={C.tm} />
               </motion.div>
@@ -261,14 +228,9 @@ function DebtDetailModal({
 }: DebtDetailModalProps) {
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
-  const hasOwnBalance = friend.balance !== 0;
   const isLent = friend.balance > 0;
-  const outstandingOwedTo = (friend.history || []).filter((h) => h.owedTo && !h.isSettled);
-  const isSettled = !hasOwnBalance && outstandingOwedTo.length === 0;
-  const absBalance = hasOwnBalance
-    ? Math.abs(friend.balance)
-    : Math.round(outstandingOwedTo.reduce((sum, h) => sum + h.amount, 0) * 100) / 100;
-  const owedToNames = Array.from(new Set(outstandingOwedTo.map((h) => h.owedTo).filter(Boolean) as string[])).join(", ");
+  const isSettled = friend.balance === 0;
+  const absBalance = Math.abs(friend.balance);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -337,16 +299,14 @@ function DebtDetailModal({
                 isSettled ? "text-white" : isLent ? "text-green-500" : "text-red-500"
               }`}
             >
-              {isSettled ? "" : formatCurrency(hasOwnBalance ? friend.balance : absBalance)}
+              {isSettled ? "" : formatCurrency(friend.balance)}
             </h2>
             <p className="text-xs text-tm mt-2">
               {isSettled
                 ? t("debt.noActiveBalance")
-                : hasOwnBalance
-                ? isLent
-                  ? `${friend.name} ${t("debt.owesYouAmount")}`
-                  : `${t("debt.youOweAmount")} ${friend.name}`
-                : `${friend.name} ${t("debt.owesToAmount")} ${owedToNames}`}
+                : isLent
+                ? `${friend.name} ${t("debt.owesYouAmount")}`
+                : `${t("debt.youOweAmount")} ${friend.name}`}
             </p>
           </div>
 
@@ -409,7 +369,7 @@ function DebtDetailModal({
           </div>
 
           {/* Settle Up Action Button */}
-          {hasOwnBalance && (
+          {!isSettled && (
             <motion.button
               type="button"
               onClick={onSettle}

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Sparkles, Camera, Loader2, Image as ImageIcon } from "lucide-react";
+import { Sparkles, Camera, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { C } from "../../App";
@@ -7,11 +7,10 @@ import { processReceiptOcr, OcrParsedItem } from "../../services/ocrService";
 import { compressImage } from "../../utils/imageCompressor";
 
 interface OcrScannerCardProps {
-  userApiKey?: string;
   onItemsParsed: (items: OcrParsedItem[]) => void;
 }
 
-export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProps) {
+export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -19,6 +18,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
   const [isExtracting, setIsExtracting] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrLoadingText, setOcrLoadingText] = useState("");
+  const [ocrError, setOcrError] = useState("");
 
   const handleCancel = () => {
     if (abortControllerRef.current) {
@@ -28,7 +28,10 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
     setIsExtracting(false);
     setOcrProgress(0);
     setOcrLoadingText("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setOcrError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,6 +42,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
     const signal = abortControllerRef.current.signal;
 
     setIsExtracting(true);
+    setOcrError("");
     setOcrProgress(15);
     setOcrLoadingText(t("split.compressingImage", "Compressing image..."));
 
@@ -61,20 +65,13 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
       if (base64Data) {
         const mimeType = base64Data.substring(base64Data.indexOf(":") + 1, base64Data.indexOf(";")) || "image/jpeg";
         const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
-        const formattedBase64 = base64Data.startsWith("data:")
-          ? base64Data
-          : `data:${mimeType};base64,${pureBase64}`;
-
         setOcrProgress(30);
         setOcrLoadingText(t("split.aiAnalyzing", "Analyzing receipt..."));
 
         const items = await processReceiptOcr({
           pureBase64,
           mimeType,
-          formattedBase64,
-          userApiKey,
           signal,
-          defaultNameLabel: t("common.unnamed", "Item"),
           onProgress: (percent, statusText) => {
             if (!signal.aborted) {
               setOcrProgress(percent);
@@ -93,8 +90,6 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
 
         if (!signal.aborted && items && items.length > 0) {
           onItemsParsed(items);
-        } else if (!signal.aborted) {
-          alert("AI chưa trích xuất được món ăn nào từ ảnh bạn đã chọn. Vui lòng thử lại với ảnh hóa đơn rõ nét hơn.");
         }
       }
     } catch (err: any) {
@@ -102,14 +97,16 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
         console.log("OCR scan cancelled by user.");
       } else {
         console.error("OCR Scan Error:", err);
-        alert("Đã xảy ra lỗi khi phân tích ảnh hóa đơn. Vui lòng thử lại.");
+        setOcrError(t("split.ocrFailed", "Receipt analysis failed. Please try again."));
       }
     } finally {
       if (!signal.aborted) {
         setIsExtracting(false);
         setOcrProgress(0);
         setOcrLoadingText("");
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
     }
   };
@@ -123,11 +120,11 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
           borderColor: `${C.gold}44`,
         }}
       >
-        {/* Native File Input (Triggers iOS Action Sheet: Photo Library / Take Photo / Choose File) */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          capture="environment"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -141,7 +138,7 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
               <Sparkles size={18} />
             </div>
             <div className="min-w-0">
-              <h4 className="text-sm font-bold text-white truncate font-sans">
+              <h4 className="text-sm font-bold text-[var(--paper-ink)] truncate font-sans">
                 {t("split.ocrTitle", "AI OCR Receipt Scanner")}
               </h4>
               <p className="text-[11px] text-tm truncate font-sans">
@@ -155,13 +152,18 @@ export function OcrScannerCard({ userApiKey, onItemsParsed }: OcrScannerCardProp
             onClick={() => fileInputRef.current?.click()}
             disabled={isExtracting}
             whileTap={{ scale: 0.95 }}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 font-sans border-0 shadow-lg shrink-0"
+            className="px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 font-sans border-0 shadow-lg shrink-0"
             style={{ background: C.gold, color: C.bg }}
           >
             <Camera size={15} />
-            <span>{t("split.cameraOcrBtn", "Quét hóa đơn")}</span>
+            <span>{t("split.cameraOcrBtn", "Snap Receipt")}</span>
           </motion.button>
         </div>
+        {ocrError && (
+          <p role="alert" className="m-0 text-xs font-semibold text-red-700">
+            {ocrError}
+          </p>
+        )}
       </div>
 
       {/* Fullscreen AI Scanning Loading Modal Overlay */}

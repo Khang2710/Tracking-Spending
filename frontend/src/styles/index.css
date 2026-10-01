@@ -1,7 +1,74 @@
 @import "tailwindcss";
 @import 'tw-animate-css';
+@import './paper-ledger.css';
 
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  margin: 0;
+}
+
+.app-loading-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  color: #191b17;
+  background: #f4f3ef;
+}
+
+.app-loading-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  animation: app-loading-rise 420ms ease-out both;
+}
+
+.app-loading-mark {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 30px;
+  padding: 0 4px;
+}
+
+.app-loading-mark span {
+  width: 7px;
+  height: 12px;
+  border-radius: 999px;
+  background: #171a16;
+  animation: app-loading-pulse 900ms ease-in-out infinite;
+}
+
+.app-loading-mark span:nth-child(2) { height: 22px; animation-delay: 120ms; }
+.app-loading-mark span:nth-child(3) { height: 16px; animation-delay: 240ms; }
+
+.app-loading-brand {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-loading-label {
+  margin: 0;
+  color: #74786f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@keyframes app-loading-pulse {
+  0%, 100% { transform: scaleY(0.72); opacity: 0.42; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes app-loading-rise {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-card,
+  .app-loading-mark span { animation: none; }
 }

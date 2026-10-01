@@ -1,43 +1,93 @@
-<img width="2888" height="1723" alt="image" src="https://github.com/user-attachments/assets/bec49653-ef1e-4a29-8051-fe66450ca645" />
+# Wealthy — Full-Stack Personal Finance Tracker
 
-## 📖 About the Project
-**Wealthy (Tracking Spending)** is a modern Web Application designed to help users manage personal finances and solve the headache of group expenses (Split Bills) intelligently. 
+Wealthy is a responsive finance application for wallets, transactions, monthly budgets, savings goals, recurring expenses, shared bills, and AI-powered receipt extraction. It supports English/Vietnamese interfaces and USD/VND display.
 
-The standout feature of this project is the integration of **Artificial Intelligence (AI OCR)** to automatically read and extract data from receipt images, seamlessly calculating debts for each individual. The application features a premium **Bento Grid OLED Dark & Gold Luxe** design system, ensuring a minimalist, fluid, and high-end user experience.
+## Why this project is portfolio-ready
 
-## ✨ Key Features
+- React/TypeScript client with responsive desktop and mobile layouts
+- Node.js/Express REST API with request validation and centralized errors
+- Supabase Auth access-token verification and ownership-aware PostgreSQL RLS
+- Atomic transaction and wallet-balance updates through database RPCs
+- Server-only Groq/OpenRouter receipt OCR with provider fallback
+- Automated frontend, backend, and database-policy tests
 
-*   🧾 **Smart AI Receipt OCR:** Snap a photo or upload a receipt image. The AI automatically parses dish names and exact prices, eliminating manual entry and formatting errors.
-*   🤝 **Advanced Bill Splitting:** Assign specific dishes to specific individuals, auto-calculate taxes, tips, and generate a detailed debts distribution breakdown.
-*   📊 **Management Dashboard:** Track your total balance, cash flows, and categorical spending with intuitive visual charts.
-*   🌍 **Multi-Currency Support:** Seamlessly track and convert currencies (VND/USD).
-*   📱 **Cross-Device Sync:** Data is synchronized in real-time on the cloud, ensuring a smooth experience across both desktop and mobile web.
+## Repository layout
 
-## 🛠️ Tech Stack
+```text
+.
+├── frontend/   # React 18 + Vite user interface
+├── backend/    # Node.js 22 + Express API
+├── supabase/   # PostgreSQL migrations, RLS tests, verification notes
+└── docs/       # Architecture and maintenance documentation
+```
 
-### Frontend
-*   **Core:** React.js, Vite
-*   **Styling:** Tailwind CSS (Featuring an `#09090B` OLED black theme with Champagne Gold accents)
-*   **Motion:** Framer Motion (for fluid transitions and micro-interactions)
+## Requirements
 
-### Backend
-*   **Framework:** Java Spring Boot
-*   **ORM:** Spring Data JPA / Hibernate
-*   **Database:** PostgreSQL (Hosted on the cloud via **Supabase**)
+- Node.js 22 or newer
+- npm 10 or newer
+- A Supabase project with the checked-in migrations applied
+- A Groq or OpenRouter API key for receipt OCR
 
-### Integrations
-*   **OpenAI API:** Utilized for computer vision capabilities to extract structured JSON data from raw receipt images.
+## Environment setup
 
-## 🚀 Getting Started
+```bash
+cp frontend/.env.example frontend/.env.local
+cp backend/.env.example backend/.env
+```
 
-### Prerequisites
-*   Node.js (v16 or higher)
-*   Java JDK 17 (or newer)
-*   Maven
-*   A Supabase (PostgreSQL) account and an OpenAI API Key.
+Frontend variables are browser-safe:
 
-### 1. Backend Setup (Spring Boot)
-1. Navigate to the backend directory: `cd backend`
-2. Create a `.env` file in the backend root directory and add your database credentials:
-   ```env
-   DB_PASSWORD=your_supabase_database_password
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+VITE_API_BASE_URL=
+```
+
+Backend variables stay server-side:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+GROQ_API_KEY=your-server-secret
+OPENROUTER_API_KEY=
+```
+
+Never prefix AI secrets with `VITE_`. Vite exposes every `VITE_*` value to the browser bundle.
+
+## Install
+
+```bash
+npm --prefix backend install
+npm --prefix frontend install --legacy-peer-deps
+```
+
+## Run locally
+
+Start the backend in one terminal:
+
+```bash
+npm run dev:backend
+```
+
+Start the frontend in a second terminal:
+
+```bash
+npm run dev:frontend
+```
+
+Open [http://localhost:5173](http://localhost:5173). Vite proxies local `/api` calls to the backend at `http://localhost:8080`.
+
+## Verify
+
+```bash
+npm run check
+```
+
+This runs both applications' typechecks, tests, and production builds.
+
+## Security model
+
+The browser signs in through Supabase Auth and sends the current access token to the backend. The backend verifies the token with Supabase Auth and forwards it to a request-scoped Supabase client, so PostgreSQL RLS remains active. AI provider keys never enter the browser, browser storage, or API request bodies.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full request and data flow.

@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, ArrowUpRight, X, UsersRound, BookmarkPlus, Check } from "lucide-react";
+import { Plus, Trash2, ArrowUpRight, Banknote } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { C, Card } from "../../App";
 
 interface SplitItem {
@@ -11,7 +10,7 @@ interface SplitItem {
   consumers: string[];
 }
 
-import { FriendBalanceItem, FriendGroup, SavedBill } from "./SplitScreen";
+import { FriendBalanceItem, SavedBill } from "./SplitScreen";
 import { Transaction } from "../../App";
 import { useCurrency } from "../../context/CurrencyContext";
 import { OcrScannerCard } from "./OcrScannerCard";
@@ -26,9 +25,6 @@ interface AssignBillProps {
   userName: string;
   setBills: React.Dispatch<React.SetStateAction<SavedBill[]>>;
   onAddTransaction?: (tx: Omit<Transaction, "id">) => void;
-  groups: FriendGroup[];
-  onSaveGroup: (name: string) => void;
-  onDeleteGroup: (id: string) => void;
 }
 
 export default function AssignBill({
@@ -40,23 +36,15 @@ export default function AssignBill({
   userName,
   setBills,
   onAddTransaction,
-  groups,
-  onSaveGroup,
-  onDeleteGroup,
 }: AssignBillProps) {
   const { t } = useTranslation();
-  const { formatCurrency, currency, setCurrency, exchangeRate } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [taxPercent, setTaxPercent] = useState<number>(0);
   const [tip, setTip] = useState<number>(0);
-  const [serviceCharge, setServiceCharge] = useState<number>(0);
-  const [discount, setDiscount] = useState<number>(0);
 
   const [newFriendName, setNewFriendName] = useState("");
-  const [showSaveGroupInput, setShowSaveGroupInput] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [apiKeyInput] = useState(() => (import.meta.env.VITE_GROQ_KEY as string) || (import.meta.env.VITE_OPENAI_KEY as string) || localStorage.getItem("groq_api_key") || localStorage.getItem("openai_api_key") || localStorage.getItem("gemini_api_key") || "");
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [billTitle, setBillTitle] = useState("");
@@ -67,49 +55,20 @@ export default function AssignBill({
 
   const handleItemsParsed = (parsedItems: OcrParsedItem[]) => {
     let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-
-    // Dynamic Currency Switching: Always update currency state to match the scanned receipt
-    const isUsdReceipt = parsedItems.some(
-      (it) => it.currency === "USD" || (it.price > 0 && it.price < 500 && it.price % 1 !== 0)
-    ) || (parsedItems.length > 0 && parsedItems.every((it) => it.price > 0 && it.price < 500));
-
     const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
       id: nextId++,
       name: item.name,
-      price: isUsdReceipt ? Math.round(item.price * exchangeRate) : Math.round(item.price),
+      price: item.price,
       consumers: [],
     }));
     setItems((prev) => [...prev, ...newSplitItems]);
-
-    if (isUsdReceipt) {
-      setCurrency("USD");
-      // Auto-populate absolute Tax, Tip, Service Charge & Discount for USD receipts if extracted by AI
-      const extractedTax = parsedItems.find((it) => typeof it.tax === "number" && it.tax > 0)?.tax ?? 0;
-      const extractedTip = parsedItems.find((it) => typeof it.tip === "number" && it.tip > 0)?.tip ?? 0;
-      const extractedService = parsedItems.find((it) => typeof it.serviceCharge === "number" && it.serviceCharge > 0)?.serviceCharge ?? 0;
-      const extractedDiscount = parsedItems.find((it) => typeof it.discount === "number" && it.discount > 0)?.discount ?? 0;
-
-      setTaxPercent(extractedTax);
-      setTip(extractedTip);
-      setServiceCharge(extractedService);
-      setDiscount(extractedDiscount);
-    } else {
-      setCurrency("VND");
-      // Keep manual tax/tip/serviceCharge/discount for VND receipts (default to 0)
-      setTaxPercent(0);
-      setTip(0);
-      setServiceCharge(0);
-      setDiscount(0);
-    }
   };
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim() || !newItemPrice) return;
-    const rawPrice = parseFloat(newItemPrice);
-    if (isNaN(rawPrice) || rawPrice < 0) return;
-
-    const price = currency === "USD" ? Math.round(rawPrice * exchangeRate) : Math.round(rawPrice);
+    const price = parseFloat(newItemPrice);
+    if (isNaN(price) || price < 0) return;
 
     const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
     setItems((prev) => [
@@ -143,35 +102,6 @@ export default function AssignBill({
     if (selectedItemId === id) setSelectedItemId(null);
   };
 
-  // Recurring groups: apply a saved group by adding its missing members to the roster
-  const handleApplyGroup = (group: FriendGroup) => {
-    let addedCount = 0;
-    group.members.forEach((m) => {
-      const clean = m.normalize("NFC").trim();
-      if (!clean) return;
-      const exists = friends.some(
-        (f) => f.normalize("NFC").trim().toLowerCase() === clean.toLowerCase()
-      );
-      if (!exists) {
-        onAddFriend(clean);
-        addedCount++;
-      }
-    });
-    if (addedCount === 0) {
-      toast.info(t("split.groupAlreadyAdded", "Cả nhóm này đã có trong danh sách bạn bè"));
-    }
-  };
-
-  const handleSaveGroupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = newGroupName.trim();
-    if (!name || friends.length === 0) return;
-    onSaveGroup(name);
-    setNewGroupName("");
-    setShowSaveGroupInput(false);
-    toast.success(t("split.groupSaved", "Đã lưu nhóm!"));
-  };
-
   const handleToggleConsumer = (friendName: string) => {
     if (selectedItemId === null) return;
     setItems((prev) =>
@@ -188,7 +118,7 @@ export default function AssignBill({
     );
   };
 
-  const { debts, subtotal, totalTax, grandTotal, tipVnd, serviceChargeVnd, discountVnd } = useMemo(() => {
+  const { debts, subtotal, totalTax, grandTotal } = useMemo(() => {
     const allParticipants = [myName, ...friends];
     const numPeople = allParticipants.length;
     const itemShares: Record<string, number> = {};
@@ -211,62 +141,31 @@ export default function AssignBill({
       }
     });
 
-    const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
-
-    const totalTaxVnd = currency === "USD" 
-      ? Math.round(taxPercent * exchangeRate)
-      : calculatedSubtotal * (taxPercent / 100);
-
-    const tVnd = currency === "USD" ? Math.round(tip * exchangeRate) : Math.round(tip);
-    const sVnd = currency === "USD" ? Math.round(serviceCharge * exchangeRate) : Math.round(serviceCharge);
-    const dVnd = currency === "USD" ? Math.round(discount * exchangeRate) : Math.round(discount);
-
-    const tipShare = numPeople > 0 ? tVnd / numPeople : 0;
-    const serviceChargeShare = numPeople > 0 ? sVnd / numPeople : 0;
-
+    const tipShare = numPeople > 0 ? tip / numPeople : 0;
     const calculatedDebts = allParticipants.map((p) => {
       const assignedItemCost = itemShares[p] || 0;
       const personalItemCost = assignedItemCost + sharedAmountPerPerson;
-
-      const discountShare = dVnd > 0
-        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * dVnd : (numPeople > 0 ? dVnd / numPeople : 0))
-        : 0;
-
-      const personalTax = currency === "USD"
-        ? (calculatedSubtotal > 0 ? (personalItemCost / calculatedSubtotal) * totalTaxVnd : (numPeople > 0 ? totalTaxVnd / numPeople : 0))
-        : personalItemCost * (taxPercent / 100);
-
-      const totalDue = Math.max(0, personalItemCost - discountShare + personalTax + tipShare + serviceChargeShare);
+      const personalTax = personalItemCost * (taxPercent / 100);
+      const totalDue = personalItemCost + personalTax + tipShare;
       return {
         name: p,
         itemCost: personalItemCost,
         tax: personalTax,
-        discountShare,
-        total: Math.round(totalDue),
+        total: Math.round(totalDue * 100) / 100,
       };
     });
 
-    const calculatedGrandTotal = Math.max(0, calculatedSubtotal - dVnd + totalTaxVnd + tVnd + sVnd);
-
-    // Adjust rounding remainder to ensure sum(debts) equals grandTotal exactly
-    const sumRoundedDebts = calculatedDebts.reduce((sum, d) => sum + d.total, 0);
-    const debtDiff = calculatedGrandTotal - sumRoundedDebts;
-    if (debtDiff !== 0 && calculatedDebts.length > 0) {
-      const payerIndex = calculatedDebts.findIndex((d) => d.name === activePayer);
-      const targetIdx = payerIndex !== -1 ? payerIndex : 0;
-      calculatedDebts[targetIdx].total = Math.max(0, calculatedDebts[targetIdx].total + debtDiff);
-    }
+    const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
+    const calculatedTotalTax = calculatedSubtotal * (taxPercent / 100);
+    const calculatedGrandTotal = calculatedSubtotal + calculatedTotalTax + tip;
 
     return {
       debts: calculatedDebts,
       subtotal: calculatedSubtotal,
-      totalTax: totalTaxVnd,
+      totalTax: calculatedTotalTax,
       grandTotal: calculatedGrandTotal,
-      tipVnd: tVnd,
-      serviceChargeVnd: sVnd,
-      discountVnd: dVnd,
     };
-  }, [items, friends, myName, taxPercent, tip, serviceCharge, discount, currency, exchangeRate, activePayer]);
+  }, [items, friends, myName, taxPercent, tip]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -300,43 +199,30 @@ export default function AssignBill({
         const d = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === fbNormName);
         if (!d) return fb;
 
+        let diff = 0;
+        let desc = "";
+        let isLent = false;
+
         const activePayerNorm = activePayer.normalize("NFC").trim().toLowerCase();
         const myNameNorm = myName.normalize("NFC").trim().toLowerCase();
 
-        const isFriendThePayer = activePayerNorm === fbNormName;
-        const iAmThePayer = activePayerNorm === myNameNorm;
-
-        let diff = 0;
-        let amount = 0;
-        let desc = "";
-        let isLent = false;
-        let owedTo = "";
-
-        if (isFriendThePayer) {
-          // This friend paid: I owe them my share only (negative balance = I owe).
-          const myShare = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === myNameNorm)?.total ?? 0;
-          diff = -Math.round(myShare * 100) / 100;
-          amount = Math.abs(diff);
-          desc = `${finalTitle} (${fb.name} ${t("split.paid") || "đã trả"})`;
-          isLent = false;
-        } else if (iAmThePayer) {
-          // I paid: each friend owes me their share.
+        if (activePayerNorm === myNameNorm) {
           diff = d.total;
-          amount = d.total;
           desc = `${finalTitle} (${t("split.youPaid") || "Bạn đã trả"})`;
           isLent = true;
+        } else if (activePayerNorm === fbNormName) {
+          const myDebt = debts.find((x) => x.name.normalize("NFC").trim().toLowerCase() === myNameNorm);
+          const myShare = myDebt ? myDebt.total : 0;
+          diff = -myShare;
+          desc = `${finalTitle} (${fb.name} ${t("split.paid") || "đã trả"})`;
+          isLent = false;
         } else {
-          // A third party paid: this friend owes the payer (friend-to-friend debt,
-          // recorded on their row so it stays visible in Running Balances).
-          amount = d.total;
+          diff = 0;
           desc = `${finalTitle} (${t("split.paidBy") || "Trả bởi"} ${activePayer})`;
           isLent = false;
-          if (d.total > 0) {
-            owedTo = activePayer;
-          }
         }
 
-        if (diff === 0 && !owedTo) return fb;
+        if (diff === 0) return fb;
 
         return {
           ...fb,
@@ -345,11 +231,10 @@ export default function AssignBill({
             {
               id: String(Date.now() + Math.random()),
               date: new Date().toLocaleDateString("vi-VN"),
-              amount,
+              amount: Math.abs(diff),
               description: desc,
               isLent,
               isSettled: false,
-              owedTo: owedTo || undefined,
             },
             ...fb.history,
           ],
@@ -399,16 +284,13 @@ export default function AssignBill({
       <div className="px-5 md:px-0 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 pb-10">
         {/* Left Column: OCR Scanner, Food Item List & Add Form, Friends List */}
         <div className="lg:col-span-8 flex flex-col gap-6">
-          <OcrScannerCard
-            userApiKey={apiKeyInput}
-            onItemsParsed={handleItemsParsed}
-          />
+          <OcrScannerCard onItemsParsed={handleItemsParsed} />
 
           {/* Card 2: Items & Assignment Section */}
           <Card className="p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-[16px] font-semibold text-white font-sans">
+                <h3 className="text-[16px] font-semibold text-[var(--paper-ink)] font-sans">
                   {t("split.selectFoodTitle")}
                 </h3>
                 <p className="text-xs text-tm mt-0.5">
@@ -423,7 +305,7 @@ export default function AssignBill({
                 style={{ borderColor: C.border }}
               >
                 <div className="w-10 h-10 rounded-xl bg-surf/80 border border-border flex items-center justify-center text-tm">
-                  <span className="text-lg">💲</span>
+                  <Banknote size={19} aria-hidden="true" />
                 </div>
                 <p className="text-xs text-tm font-sans">{t("split.noItems")}</p>
               </div>
@@ -455,7 +337,7 @@ export default function AssignBill({
                           {item.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white truncate">{item.name}</p>
+                          <p className="text-sm font-semibold text-[var(--paper-ink)] truncate">{item.name}</p>
                           <p className="text-xs text-tm font-mono mt-0.5">
                             {formatCurrency(item.price)}
                             {hasConsumers && (
@@ -475,7 +357,7 @@ export default function AssignBill({
                               <div
                                 key={c}
                                 title={c}
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border text-white shadow-sm"
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border text-[var(--paper-ink)] shadow-sm"
                                 style={{ background: C.surf, borderColor: C.gold }}
                               >
                                 {getInitials(c)}
@@ -508,7 +390,7 @@ export default function AssignBill({
                 placeholder={t("split.dishPlaceholder")}
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
-                className="flex-1 px-4 py-2.5 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                className="flex-1 px-4 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                 style={{ borderColor: C.border }}
               />
               <div className="relative w-32 md:w-40">
@@ -517,7 +399,7 @@ export default function AssignBill({
                   placeholder={t("split.pricePlaceholder")}
                   value={newItemPrice}
                   onChange={(e) => setNewItemPrice(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold pr-8"
+                  className="w-full px-4 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold pr-8"
                   style={{ borderColor: C.border }}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-tm font-bold">
@@ -537,7 +419,7 @@ export default function AssignBill({
           {/* Card 3: Friends List Card */}
           <Card className="p-4 md:p-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[16px] font-semibold text-white font-sans">
+              <h3 className="text-[16px] font-semibold text-[var(--paper-ink)] font-sans">
                 {t("split.friendsAvatars")}
               </h3>
               <p className="text-xs text-red font-semibold">
@@ -568,7 +450,7 @@ export default function AssignBill({
                     }}
                   >
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white border"
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-[var(--paper-ink)] border"
                       style={{ background: C.bg, borderColor: C.border }}
                     >
                       {getInitials(personName)}
@@ -576,19 +458,6 @@ export default function AssignBill({
                     <span>
                       {personName} {isMe && `(${t("common.you")})`}
                     </span>
-                    {!isMe && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveFriend(personName);
-                        }}
-                        className="w-4 h-4 rounded-full flex items-center justify-center text-tm hover:text-red hover:bg-red/10 transition-colors cursor-pointer bg-transparent border-0 p-0 -ml-1"
-                        title={t("split.removeFriend")}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -600,100 +469,10 @@ export default function AssignBill({
                   placeholder={`+ ${t("split.addFriend")}`}
                   value={newFriendName}
                   onChange={(e) => setNewFriendName(e.target.value)}
-                  className="px-3 py-1.5 rounded-full border text-xs text-white bg-surf outline-none focus:border-gold w-28"
+                  className="px-3 py-1.5 rounded-full border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold w-28"
                   style={{ borderColor: C.border }}
                 />
               </form>
-            </div>
-
-            {/* Recurring Groups Section (Save Group / Frequent Groups) */}
-            <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h4 className="text-xs font-semibold text-tm flex items-center gap-1.5">
-                  <UsersRound size={12} /> {t("split.savedGroups", "Nhóm thường dùng")}
-                </h4>
-
-                {showSaveGroupInput ? (
-                  <form onSubmit={handleSaveGroupSubmit} className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder={t("split.groupNamePlaceholder", "Tên nhóm (vd: Hội ăn trưa)")}
-                      value={newGroupName}
-                      onChange={(e) => setNewGroupName(e.target.value)}
-                      className="px-3 py-1.5 rounded-full border text-xs text-white bg-surf outline-none focus:border-gold w-40 md:w-48"
-                      style={{ borderColor: C.border }}
-                    />
-                    <button
-                      type="submit"
-                      className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer transition-all hover:brightness-110 border-0 shrink-0"
-                      style={{ background: C.green, color: C.bg }}
-                      title={t("common.save", "Lưu")}
-                    >
-                      <Check size={13} strokeWidth={3} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSaveGroupInput(false);
-                        setNewGroupName("");
-                      }}
-                      className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer transition-colors text-tm hover:text-white hover:bg-surf border-0 p-0 shrink-0"
-                      title={t("common.cancel", "Hủy")}
-                    >
-                      <X size={13} />
-                    </button>
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowSaveGroupInput(true)}
-                    disabled={friends.length === 0}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold cursor-pointer transition-all hover:brightness-110 border disabled:opacity-40 disabled:cursor-not-allowed bg-transparent"
-                    style={{ borderColor: C.gold + "55", color: C.gold }}
-                    title={t("split.saveGroupHint", "Lưu danh sách bạn bè hiện tại thành nhóm")}
-                  >
-                    <BookmarkPlus size={12} /> {t("split.saveGroup", "Lưu nhóm này")}
-                  </button>
-                )}
-              </div>
-
-              {groups.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {groups.map((g) => (
-                    <div
-                      key={g.id}
-                      onClick={() => handleApplyGroup(g)}
-                      className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full border text-[11px] font-semibold cursor-pointer transition-all hover:brightness-125"
-                      style={{ borderColor: C.border, background: C.surf + "60", color: C.white }}
-                      title={g.members.join(", ")}
-                    >
-                      <UsersRound size={11} style={{ color: C.gold }} />
-                      <span>
-                        {g.name} <span className="text-tm">({g.members.length})</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteGroup(g.id);
-                        }}
-                        className="w-4 h-4 rounded-full flex items-center justify-center text-tm hover:text-red hover:bg-red/10 transition-colors cursor-pointer bg-transparent border-0 p-0"
-                        title={t("split.removeFriend", "Xoá")}
-                      >
-                        <X size={10} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[11px] text-tm leading-relaxed">
-                  {t(
-                    "split.noGroupsHint",
-                    "Chưa có nhóm nào. Thêm bạn bè rồi bấm \"Lưu nhóm này\" để tạo nhanh cho lần sau."
-                  )}
-                </p>
-              )}
             </div>
           </Card>
         </div>
@@ -701,7 +480,7 @@ export default function AssignBill({
         {/* Right Column: Calculations Share (Sidebar Card) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <Card className="p-4 md:p-6 flex flex-col gap-4">
-            <h3 className="text-[16px] font-semibold text-white font-sans mb-1">
+            <h3 className="text-[16px] font-semibold text-[var(--paper-ink)] font-sans mb-1">
               {t("split.calculationsShare")}
             </h3>
 
@@ -715,7 +494,7 @@ export default function AssignBill({
                 placeholder={t("split.billTitlePlaceholder")}
                 value={billTitle}
                 onChange={(e) => setBillTitle(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                className="w-full px-3.5 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                 style={{ borderColor: C.border }}
               />
             </div>
@@ -728,7 +507,7 @@ export default function AssignBill({
               <select
                 value={activePayer}
                 onChange={(e) => setPayer(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                className="w-full px-3.5 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                 style={{ borderColor: C.border }}
               >
                 <option value={myName}>{myName} ({t("common.you")})</option>
@@ -738,61 +517,31 @@ export default function AssignBill({
               </select>
             </div>
 
-            {/* Tax, Tip, Fee & Discount Row */}
-            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+            {/* Tax & Tip Row */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Tax">
-                  {currency === "USD" ? `${t("split.tax")} ($)` : `${t("split.tax")} (%)`}
+                <label className="text-xs text-tm mb-1.5 block font-semibold">
+                  {t("split.tax")}
                 </label>
                 <input
                   type="number"
-                  step={currency === "USD" ? "0.01" : "1"}
                   placeholder="0"
                   value={taxPercent || ""}
                   onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
+                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
               </div>
               <div>
-                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Tip">
+                <label className="text-xs text-tm mb-1.5 block font-semibold">
                   {t("split.tip", { symbol: currency === "VND" ? "đ" : "$" })}
                 </label>
                 <input
                   type="number"
-                  step={currency === "USD" ? "0.01" : "1000"}
                   placeholder="0"
                   value={tip || ""}
                   onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
-                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-tm mb-1 block font-semibold truncate" title="Service Charge">
-                  {t("split.fee", { symbol: currency === "VND" ? "đ" : "$" })}
-                </label>
-                <input
-                  type="number"
-                  step={currency === "USD" ? "0.01" : "1000"}
-                  placeholder="0"
-                  value={serviceCharge || ""}
-                  onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
-                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-tm mb-1 block font-semibold truncate text-green" title="Discount">
-                  {t("split.discount", { symbol: currency === "VND" ? "đ" : "$" })}
-                </label>
-                <input
-                  type="number"
-                  step={currency === "USD" ? "0.01" : "1000"}
-                  placeholder="0"
-                  value={discount || ""}
-                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-2.5 py-2 rounded-xl border text-xs text-white bg-surf outline-none focus:border-green"
+                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
               </div>
@@ -808,12 +557,12 @@ export default function AssignBill({
                 {debts.map((d) => (
                   <div key={d.name} className="flex justify-between items-center text-xs p-2.5 rounded-xl" style={{ background: C.surf + "30" }}>
                     <div className="flex flex-col">
-                      <span className="text-white font-semibold">{d.name}</span>
+                      <span className="text-[var(--paper-ink)] font-semibold">{d.name}</span>
                       <span className="text-[10px] text-tm mt-0.5">
                         {t("split.dishCost") || "Món"}: {formatCurrency(d.itemCost)} + {t("split.taxLabel") || "Thuế"}: {formatCurrency(d.tax)}
                       </span>
                     </div>
-                    <span className="font-mono font-bold text-white">{formatCurrency(d.total)}</span>
+                    <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(d.total)}</span>
                   </div>
                 ))}
               </div>
@@ -823,30 +572,18 @@ export default function AssignBill({
             <div className="pt-3 border-t flex flex-col gap-2 text-xs" style={{ borderColor: C.border }}>
               <div className="flex justify-between text-tm">
                 <span>{t("split.itemsSubtotal")}:</span>
-                <span className="font-mono font-bold text-white">{formatCurrency(subtotal)}</span>
+                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(subtotal)}</span>
               </div>
-              {discountVnd > 0 && (
-                <div className="flex justify-between text-green">
-                  <span>{t("split.discountLabel") || t("split.discount_label") || "Discount"}:</span>
-                  <span className="font-mono font-bold">-{formatCurrency(discountVnd)}</span>
-                </div>
-              )}
               <div className="flex justify-between text-tm">
-                <span>{t("split.taxLabel")} {currency === "USD" ? "" : `(${taxPercent}%)`}:</span>
-                <span className="font-mono font-bold text-white">{formatCurrency(totalTax)}</span>
+                <span>{t("split.taxLabel")} ({taxPercent}%):</span>
+                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(totalTax)}</span>
               </div>
               <div className="flex justify-between text-tm">
                 <span>{t("split.flatTip")}:</span>
-                <span className="font-mono font-bold text-white">{formatCurrency(tipVnd)}</span>
+                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(tip)}</span>
               </div>
-              {serviceChargeVnd > 0 && (
-                <div className="flex justify-between text-tm">
-                  <span>{t("split.serviceFee") || t("split.service_fee") || "Service Charge"}:</span>
-                  <span className="font-mono font-bold text-white">{formatCurrency(serviceChargeVnd)}</span>
-                </div>
-              )}
 
-              <div className="flex justify-between text-sm font-bold text-white pt-2.5 border-t items-center" style={{ borderColor: C.border }}>
+              <div className="flex justify-between text-sm font-bold text-[var(--paper-ink)] pt-2.5 border-t items-center" style={{ borderColor: C.border }}>
                 <span className="flex items-center gap-1">
                   <ArrowUpRight size={16} color={C.gold} /> {t("split.totalBill")}:
                 </span>

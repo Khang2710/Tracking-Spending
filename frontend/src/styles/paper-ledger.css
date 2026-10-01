@@ -1,0 +1,78 @@
+.paper-ledger {
+  --paper-canvas: #f4f3ef;
+  --paper-surface: #ffffff;
+  --paper-ink: #191b17;
+  --paper-action: #171a16;
+  --paper-muted: #4f534d;
+  --paper-subtle: #74786f;
+  --paper-border: #deddd6;
+  --paper-sage: #a9b8a0;
+  --paper-sage-soft: #e8eee4;
+  --paper-sand: #e8d9be;
+  --paper-sand-soft: #f4ece0;
+  --paper-income: #4f7d62;
+  --paper-expense: #a75d4d;
+  --paper-warning: #a66f2c;
+  color: var(--paper-ink);
+  background: var(--paper-canvas);
+}
+
+.paper-ledger .money-figure {
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.035em;
+}
+
+.paper-ledger :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--paper-sage) 75%, white);
+  outline-offset: 3px;
+}
+
+.paper-surface {
+  background: var(--paper-surface);
+  border: 1px solid color-mix(in srgb, var(--paper-border) 82%, transparent);
+  box-shadow: 0 14px 45px rgba(42, 45, 39, 0.055);
+}
+
+/* Legacy utility aliases used by the older feature screens. */
+.paper-ledger :where(.text-tm) {
+  color: var(--paper-muted) !important;
+}
+
+.paper-ledger :where(.text-gold) {
+  color: var(--paper-action) !important;
+}
+
+/* Compatibility bridge for dialogs that still use the pre-redesign dark-theme
+   utility classes. The scope keeps dark surfaces elsewhere untouched. */
+.paper-dialog :where(.text-white) {
+  color: var(--paper-ink) !important;
+}
+
+.paper-dialog :where(.text-tm) {
+  color: var(--paper-muted) !important;
+}
+
+.paper-dialog :where(.bg-surf) {
+  background: var(--paper-canvas) !important;
+}
+
+.paper-dialog :where(input, select, textarea) {
+  color: var(--paper-ink) !important;
+  caret-color: var(--paper-ink);
+}
+
+.paper-dialog :where(input, select, textarea)::placeholder {
+  color: var(--paper-subtle);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-ledger *,
+  .paper-ledger *::before,
+  .paper-ledger *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

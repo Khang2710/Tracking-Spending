@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { CurrencyType, toDisplayedAmount, VND_PER_USD } from "./currencyAmounts";
 
-export type CurrencyType = "VND" | "USD";
+export type { CurrencyType } from "./currencyAmounts";
 
 interface CurrencyContextType {
   currency: CurrencyType;
@@ -12,8 +13,6 @@ interface CurrencyContextType {
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
-export const EXCHANGE_RATE = 25000;
-
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currency, setCurrencyState] = useState<CurrencyType>(() => {
     try {
@@ -23,7 +22,16 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return "VND"; // Default VND
   });
 
-  const exchangeRate = EXCHANGE_RATE;
+  const exchangeRate = VND_PER_USD;
+
+  useEffect(() => {
+    const handlePreferencesChanged = (event: Event) => {
+      const currency = (event as CustomEvent<{ currency?: CurrencyType }>).detail?.currency;
+      if (currency === "VND" || currency === "USD") setCurrencyState(currency);
+    };
+    window.addEventListener("wealthy-preferences-changed", handlePreferencesChanged);
+    return () => window.removeEventListener("wealthy-preferences-changed", handlePreferencesChanged);
+  }, []);
 
   const setCurrency = (c: CurrencyType) => {
     setCurrencyState(c);
@@ -38,9 +46,9 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   /**
    * Global currency formatter:
-   * Accepts numerical amount (in VND) and formats based on selected currency state (VND or USD).
+   * Accepts numerical amount and formats based on selected currency state (VND or USD).
    * If currency is VND: displays with dots and ₫ symbol (e.g., 150.000 ₫).
-   * If currency is USD: displays with $ prefix (e.g., $150.00 or $6.00).
+   * If currency is USD: displays with $ prefix (e.g., $150.00 or $150).
    */
   const formatCurrency = (amount: number, forceRaw = false): string => {
     if (isNaN(amount) || amount === null || amount === undefined) {
@@ -55,9 +63,10 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const formatted = finalAmount.toLocaleString("vi-VN");
       return isNegative ? `-${formatted} ₫` : `${formatted} ₫`;
     } else {
-      const finalAmount = forceRaw ? absVal : absVal / exchangeRate;
+      // USD mode: Convert base VND amount to USD unless forceRaw is specified
+      const finalAmount = forceRaw ? absVal : toDisplayedAmount(absVal, currency);
       const formatted = finalAmount.toLocaleString("en-US", {
-        minimumFractionDigits: finalAmount % 1 === 0 ? 0 : 2,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       });
       return isNegative ? `-$${formatted}` : `$${formatted}`;

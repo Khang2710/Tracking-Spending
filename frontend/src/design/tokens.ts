@@ -1,0 +1,16 @@
+export const paperLedger = {
+  canvas: "#F4F3EF",
+  surface: "#FFFFFF",
+  ink: "#191B17",
+  action: "#171A16",
+  muted: "#4F534D",
+  subtle: "#74786F",
+  border: "#DEDDD6",
+  sage: "#A9B8A0",
+  sageSoft: "#E8EEE4",
+  sand: "#E8D9BE",
+  sandSoft: "#F4ECE0",
+  income: "#4F7D62",
+  expense: "#A75D4D",
+  warning: "#A66F2C",
+} as const;

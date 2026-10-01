@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "../../context/CurrencyContext";
-import { C, Transaction, Wallet, categoryIcons } from "../../App";
+import { Transaction, Wallet, categoryIcons } from "../../App";
 
 interface CashFlowCalendarProps {
   transactions: Transaction[];
@@ -89,6 +89,7 @@ export default function CashFlowCalendar({
       year: "numeric",
     }
   );
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) => new Date(2024, 0, 1 + index).toLocaleDateString(i18n.language?.startsWith("vi") ? "vi-VN" : "en-US", { weekday: "short" }));
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -177,27 +178,27 @@ export default function CashFlowCalendar({
   };
 
   return (
-    <div className="flex flex-col gap-5 text-white font-sans">
+    <div className="flex flex-col gap-5 font-sans text-[var(--paper-ink)]">
       {/* Month Selector & Summary Cards */}
-      <div className="bg-[#17171A] p-4 md:p-6 rounded-3xl border border-white/10 flex flex-col gap-4">
+      <div className="rounded-[26px] border border-[var(--paper-border)] bg-white p-4 shadow-[0_18px_48px_rgba(42,45,39,0.055)] md:p-6">
         {/* Month Selector Bar */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[#8A8A8A] uppercase tracking-wider">
+          <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[var(--paper-muted)]">
             {t("dashboard.monthlyBudget", "Ngân sách tháng")}
           </span>
-          <div className="flex items-center gap-2 bg-[#242428] px-3 py-1.5 rounded-full border border-white/10">
+          <div className="flex items-center gap-2 rounded-full border border-[var(--paper-border)] bg-[var(--paper-surface)] px-3 py-1.5">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="p-1 hover:text-[#C9A45B] cursor-pointer transition-colors"
+              className="cursor-pointer p-1 text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="text-xs font-bold capitalize px-1">{monthLabel}</span>
+            <span className="px-1 text-xs font-extrabold capitalize">{monthLabel}</span>
             <button
               type="button"
               onClick={handleNextMonth}
-              className="p-1 hover:text-[#C9A45B] cursor-pointer transition-colors"
+              className="cursor-pointer p-1 text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
             >
               <ChevronRight size={16} />
             </button>
@@ -206,10 +207,10 @@ export default function CashFlowCalendar({
 
         {/* Net Balance Banner */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#8A8A8A] font-medium">{t("stats.netCashFlow", "Dòng tiền ròng")}</span>
+          <span className="text-xs font-semibold text-[var(--paper-muted)]">{t("stats.netCashFlow", "Dòng tiền ròng")}</span>
           <span
             className={`text-2xl md:text-3xl font-bold font-mono ${
-              netCashFlow >= 0 ? "text-[#3DDC84]" : "text-[#FF6B6B]"
+              netCashFlow >= 0 ? "text-[var(--paper-income)]" : "text-[var(--paper-expense)]"
             }`}
           >
             {netCashFlow >= 0 ? "(+) " : "(-) "}
@@ -219,25 +220,25 @@ export default function CashFlowCalendar({
 
         {/* Inflow vs Outflow Grid */}
         <div className="grid grid-cols-2 gap-3 mt-1">
-          <div className="bg-[#1E1E21] p-3.5 rounded-2xl border border-white/5 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#3DDC84]/15 flex items-center justify-center text-[#3DDC84]">
+          <div className="flex items-center gap-3 rounded-[17px] border border-[var(--paper-border)] bg-[var(--paper-surface)] p-3.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e8eee4] text-[var(--paper-income)]">
               <ArrowDownLeft size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] text-[#8A8A8A]">{t("stats.moneyIn", "Tiền vào")}</span>
-              <span className="text-sm font-bold text-[#3DDC84] font-mono">
+              <span className="text-[11px] font-semibold text-[var(--paper-muted)]">{t("stats.moneyIn", "Tiền vào")}</span>
+              <span className="font-mono text-sm font-bold text-[var(--paper-income)]">
                 {formatCurrency(totalIncome)}
               </span>
             </div>
           </div>
 
-          <div className="bg-[#1E1E21] p-3.5 rounded-2xl border border-white/5 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#FF6B6B]/15 flex items-center justify-center text-[#FF6B6B]">
+          <div className="flex items-center gap-3 rounded-[17px] border border-[var(--paper-border)] bg-[var(--paper-surface)] p-3.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fff0eb] text-[var(--paper-expense)]">
               <ArrowUpRight size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] text-[#8A8A8A]">{t("stats.moneyOut", "Tiền ra")}</span>
-              <span className="text-sm font-bold text-[#FF6B6B] font-mono">
+              <span className="text-[11px] font-semibold text-[var(--paper-muted)]">{t("stats.moneyOut", "Tiền ra")}</span>
+              <span className="font-mono text-sm font-bold text-[var(--paper-expense)]">
                 {formatCurrency(totalExpense)}
               </span>
             </div>
@@ -246,13 +247,13 @@ export default function CashFlowCalendar({
       </div>
 
       {/* Filter Mode Tabs & Calendar Title */}
-      <div className="bg-[#17171A] p-4 md:p-6 rounded-3xl border border-white/10 flex flex-col gap-4">
+      <div className="rounded-[26px] border border-[var(--paper-border)] bg-white p-4 shadow-[0_18px_48px_rgba(42,45,39,0.055)] md:p-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-base font-bold flex items-center gap-2">
-            <CalendarIcon size={18} color={C.gold} /> {t("stats.detailedCalendar", "Lịch Chi Tiết")}
+            <CalendarIcon size={18} color="#4F7D62" /> {t("stats.detailedCalendar", "Lịch Chi Tiết")}
           </h3>
 
-          <div className="flex items-center gap-1 bg-[#0F0F10] p-1 rounded-xl border border-white/10">
+          <div className="flex items-center gap-1 rounded-xl border border-[var(--paper-border)] bg-[var(--paper-surface)] p-1">
             {(["income", "expense", "all"] as FilterMode[]).map((mode) => (
               <button
                 key={mode}
@@ -260,8 +261,8 @@ export default function CashFlowCalendar({
                 onClick={() => setFilterMode(mode)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   filterMode === mode
-                    ? "bg-[#C9A45B] text-[#0F0F10]"
-                    : "text-[#8A8A8A] hover:text-white"
+                    ? "bg-[var(--paper-ink)] text-white"
+                    : "text-[var(--paper-muted)] hover:text-[var(--paper-ink)]"
                 }`}
               >
                 {mode === "income"
@@ -275,21 +276,15 @@ export default function CashFlowCalendar({
         </div>
 
         {/* Days Header */}
-        <div className="grid grid-cols-7 text-center text-xs font-bold text-[#8A8A8A] border-b border-white/10 pb-2">
-          <span>T2</span>
-          <span>T3</span>
-          <span>T4</span>
-          <span>T5</span>
-          <span>T6</span>
-          <span>T7</span>
-          <span>CN</span>
+        <div className="mt-3 grid grid-cols-7 border-b border-[var(--paper-border)] pb-3 text-center text-xs font-bold text-[var(--paper-muted)]">
+          {weekdayLabels.map((label) => <span key={label}>{label}</span>)}
         </div>
 
         {/* Grid Cells */}
         <div className="grid grid-cols-7 gap-1.5 md:gap-2">
           {/* Padding days before start of month */}
           {Array.from({ length: firstDayIndex }).map((_, idx) => (
-            <div key={`pad-${idx}`} className="h-14 md:h-16 rounded-xl bg-[#0F0F10]/30 opacity-20" />
+            <div key={`pad-${idx}`} className="h-14 rounded-xl bg-[var(--paper-surface)] opacity-60 md:h-16" />
           ))}
 
           {/* Actual Month Days */}
@@ -302,18 +297,18 @@ export default function CashFlowCalendar({
               new Date().getFullYear() === year;
 
             let displayVal = "";
-            let textColor = "text-[#8A8A8A]";
+            let textColor = "text-[var(--paper-muted)]";
             if (filterMode === "income" && data.income > 0) {
               displayVal = `+${formatCompact(data.income)}`;
-              textColor = "text-[#3DDC84]";
+              textColor = "text-[var(--paper-income)]";
             } else if (filterMode === "expense" && data.expense > 0) {
               displayVal = `-${formatCompact(data.expense)}`;
-              textColor = "text-[#FF6B6B]";
+              textColor = "text-[var(--paper-expense)]";
             } else if (filterMode === "all") {
               const net = data.income - data.expense;
               if (net !== 0) {
                 displayVal = net > 0 ? `+${formatCompact(net)}` : `-${formatCompact(Math.abs(net))}`;
-                textColor = net > 0 ? "text-[#3DDC84]" : "text-[#FF6B6B]";
+                textColor = net > 0 ? "text-[var(--paper-income)]" : "text-[var(--paper-expense)]";
               }
             }
 
@@ -334,14 +329,14 @@ export default function CashFlowCalendar({
                 onClick={() => setSelectedDay(dayNum)}
                 className={`h-13 md:h-16 rounded-xl p-1 md:p-2 flex flex-col justify-between cursor-pointer border transition-all overflow-hidden ${
                   isToday
-                    ? "border-[#C9A45B] bg-[#C9A45B]/10"
+                    ? "border-[#a66f2c] bg-[#f4ece0]"
                     : selectedDay === dayNum
-                    ? "border-white/30 bg-[#242428]"
-                    : "border-white/5 bg-[#1E1E21] hover:bg-[#242428]"
+                    ? "border-[var(--paper-ink)] bg-[var(--paper-surface)]"
+                    : "border-[var(--paper-border)] bg-[var(--paper-surface)] hover:bg-[var(--paper-sage-soft)]"
                 }`}
                 title={fullAmountStr ? `${dayNum}: ${fullAmountStr}` : undefined}
               >
-                <span className="text-[11px] font-bold text-white leading-tight">{dayNum}</span>
+                <span className="text-[11px] font-bold leading-tight text-[var(--paper-ink)]">{dayNum}</span>
                 <span className={`text-[9px] sm:text-[11px] font-bold font-mono leading-tight whitespace-nowrap overflow-hidden text-ellipsis ${textColor}`}>
                   {displayVal}
                 </span>
@@ -360,11 +355,11 @@ export default function CashFlowCalendar({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 6 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-md bg-[#1E1E21] rounded-3xl border border-white/10 p-5 shadow-2xl flex flex-col gap-4"
+              className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-[var(--paper-border)] bg-white p-5 text-[var(--paper-ink)] shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center justify-between border-b border-[var(--paper-border)] pb-3">
                 <h4 className="font-bold text-base">
-                  Giao dịch ngày {selectedDay}/{month + 1}/{year}
+                  {t("stats.transactionsOnDate", { date: `${selectedDay}/${month + 1}/${year}` })}
                 </h4>
                 <button
                   type="button"
@@ -377,8 +372,8 @@ export default function CashFlowCalendar({
 
               <div className="flex flex-col gap-2 max-h-60 overflow-y-auto hide-scroll">
                 {selectedDayTxs.length === 0 ? (
-                  <p className="text-xs text-[#8A8A8A] text-center py-6">
-                    Không có giao dịch nào trong ngày này.
+                    <p className="py-6 text-center text-xs text-[var(--paper-muted)]">
+                      {t("stats.noTransactionsOnDay")}
                   </p>
                 ) : (
                   selectedDayTxs.map((tx) => {
@@ -394,15 +389,15 @@ export default function CashFlowCalendar({
                             onEditTransaction(tx);
                           }
                         }}
-                        className="flex items-center justify-between p-3 rounded-2xl bg-[#17171A] border border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
+                        className="flex cursor-pointer items-center justify-between rounded-2xl border border-[var(--paper-border)] bg-[var(--paper-surface)] p-3 transition-colors hover:bg-[var(--paper-sage-soft)]"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-[#C9A45B]">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--paper-sage-soft)] text-[var(--paper-ink)]">
                             <IconComp size={16} />
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-xs font-bold text-white">{tx.name}</span>
-                            <span className="text-[10px] text-[#8A8A8A]">
+                            <span className="text-xs font-bold text-[var(--paper-ink)]">{tx.name}</span>
+                            <span className="text-[10px] text-[var(--paper-muted)]">
                               {tx.category} {walletObj ? `• ${walletObj.label}` : ""}
                             </span>
                           </div>
@@ -411,7 +406,7 @@ export default function CashFlowCalendar({
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-xs font-bold font-mono ${
-                              isIncome ? "text-[#3DDC84]" : "text-[#FF6B6B]"
+                              isIncome ? "text-[var(--paper-income)]" : "text-[var(--paper-expense)]"
                             }`}
                           >
                             {isIncome ? "+" : ""}
@@ -425,7 +420,7 @@ export default function CashFlowCalendar({
                                 setSelectedDay(null);
                                 onEditTransaction(tx);
                               }}
-                              className="text-[#8A8A8A] hover:text-[#C9A45B] p-1 cursor-pointer transition-colors"
+                              className="cursor-pointer p-1 text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                               title="Sửa giao dịch"
                             >
                               <Edit2 size={14} />
@@ -437,7 +432,7 @@ export default function CashFlowCalendar({
                               e.stopPropagation();
                               onDeleteTransaction(tx.id);
                             }}
-                            className="text-[#8A8A8A] hover:text-[#FF6B6B] p-1 cursor-pointer transition-colors"
+                            className="cursor-pointer p-1 text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-expense)]"
                             title="Xóa giao dịch"
                           >
                             <Trash2 size={14} />

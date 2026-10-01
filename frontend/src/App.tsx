@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Home,
@@ -6,7 +6,7 @@ import {
   TrendingUp,
   Plus,
   ChevronRight,
-  Search,
+  CreditCard,
   House,
   Car,
   Fuel,
@@ -14,32 +14,53 @@ import {
   ShoppingBag,
   Wallet,
   Users,
+  Target,
+  PiggyBank,
+  Trophy,
   Sparkles,
+  Trash2,
+  Percent,
+  ArrowUpRight,
+  ArrowDownRight,
+  Edit2,
   Settings,
+  Loader2,
   UtensilsCrossed,
   Coffee,
   ShoppingBasket,
-  Mail,
+  Calendar,
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { toast, Toaster } from "sonner";
-import { useAuth } from "./contexts/AuthContext";
 import SplitScreen from "./features/split-bill/SplitScreen";
-import Dashboard from "./features/dashboard/Dashboard";
-import WalletManager, { WalletDialog } from "./features/wallet/WalletManager";
-import TransactionManager, { TransactionDialog } from "./features/Transaction/TransactionManager";
-import StatisticsScreen, { AddGoalModal } from "./features/Statistics/Statistics";
-import BudgetManager from "./features/budget/BudgetManager";
+import CashFlowCalendar from "./features/statistics/CashFlowCalendar";
+import { Drawer } from "vaul";
 import { useTranslation } from "react-i18next";
-import { useSyncData } from "./hooks/useSyncData";
-
-export interface AppCacheData {
-  wallets: Wallet[];
-  transactions: Transaction[];
-  savingsGoals: SavingsGoal[];
-  budget: number;
-  categoryBudgets: Record<string, number>;
-}
+import { supabase } from "./lib/supabase";
+import { HomeScreen as PaperHomeScreen } from "./features/home/HomeScreen";
+import { AppShell } from "./layout/AppShell";
+import type { AppDestination } from "./layout/navigation";
+import type { RecurringExpense } from "./features/recurring-expenses/recurring.types";
+import { advanceMonthlyDueDate, getUpcomingOccurrences } from "./features/recurring-expenses/recurring.schedule";
+import { RecurringExpensesSettings } from "./features/recurring-expenses/RecurringExpensesSettings";
+import { MonthSelector } from "./features/statistics/MonthSelector";
+import { MonthlyStatisticsDashboard } from "./features/statistics/MonthlyStatisticsDashboard";
+import { useAuth } from "./features/auth/AuthProvider";
+import { AppLoadingScreen } from "./components/common/AppLoadingScreen";
+import {
+  createCloudSavingsGoal,
+  createCloudTransaction,
+  createCloudWallet,
+  deleteCloudSavingsGoal,
+  deleteCloudTransaction,
+  deleteCloudWallet,
+  loadCloudFinance,
+  saveCloudBudget,
+  updateCloudSavingsGoal,
+  updateCloudTransaction,
+  updateCloudWallet,
+} from "./features/finance-data/finance.repository";
+import { emptyCloudFinance } from "./features/finance-data/cloudWorkspaceState";
+import { classifyTransactionCategory } from "./features/transactions/categoryClassifier";
 
 export interface SavingsGoal {
   id: number;
@@ -54,20 +75,20 @@ export interface SavingsGoal {
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 export const C = {
-  bg: "#0F0F10",
-  sec: "#17171A",
-  card: "#1E1E21",
-  surf: "#242428",
-  gold: "#C9A45B",
-  goldL: "#E2C77A",
-  high: "#F3D98B",
-  purple: "#8B5CF6",
-  green: "#3DDC84",
-  red: "#FF6B6B",
-  white: "#FFFFFF",
-  t2: "#B8B8B8",
-  tm: "#8A8A8A",
-  border: "rgba(255,255,255,0.07)",
+  bg: "#F4F3EF",
+  sec: "#ECEBE5",
+  card: "#FFFFFF",
+  surf: "#F0EFEA",
+  gold: "#171A16",
+  goldL: "#30352E",
+  high: "#191B17",
+  purple: "#746783",
+  green: "#4F7D62",
+  red: "#A75D4D",
+  white: "#191B17",
+  t2: "#4F534D",
+  tm: "#74786F",
+  border: "rgba(25,27,23,0.10)",
 } as const;
 
 // ─── Interfaces & Mappings ──────────────────────────────────────────────────
@@ -117,10 +138,28 @@ export const categoryColors: Record<string, string> = {
   Others: C.t2,
 };
 
+const initialChartData = [
+  { m: "Jan", income: 0, outcome: 0, savings: 0 },
+  { m: "Feb", income: 0, outcome: 0, savings: 0 },
+  { m: "Mar", income: 0, outcome: 0, savings: 0 },
+  { m: "Apr", income: 0, outcome: 0, savings: 0 },
+  { m: "May", income: 0, outcome: 0, savings: 0 },
+  { m: "Jun", income: 0, outcome: 0, savings: 0 },
+  { m: "Jul", income: 0, outcome: 0, savings: 0 },
+  { m: "Aug", income: 0, outcome: 0, savings: 0 },
+  { m: "Sep", income: 0, outcome: 0, savings: 0 },
+  { m: "Oct", income: 0, outcome: 0, savings: 0 },
+  { m: "Nov", income: 0, outcome: 0, savings: 0 },
+  { m: "Dec", income: 0, outcome: 0, savings: 0 },
+];
 
 const initialTransactions: Transaction[] = [];
 
 const initialWallets: Wallet[] = [];
+
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+
 
 // ─── Reusable Components ──────────────────────────────────────────────────────
 
@@ -139,11 +178,9 @@ export function Card({
     <div
       className={`rounded-2xl transition-all duration-300 ${className}`}
       style={{
-        background: "linear-gradient(145deg, rgba(26, 26, 30, 0.8) 0%, rgba(18, 18, 22, 0.95) 100%)",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)",
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        boxShadow: "0 14px 45px rgba(42, 45, 39, 0.055)",
         ...style,
       }}
       onClick={onClick}
@@ -168,7 +205,7 @@ function TagBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export function ProgressBar({
+function ProgressBar({
   value,
   max,
   color = C.gold,
@@ -199,7 +236,7 @@ export function ProgressBar({
   );
 }
 
-export function SectionHeader({
+function SectionHeader({
   title,
   actionLabel = "See All",
   onAction,
@@ -230,11 +267,9 @@ export function SectionHeader({
   );
 }
 
-
-
 // ─── HOME SCREEN ──────────────────────────────────────────────────────────────
 // Helper to extract month index (0-11) and year from any date string
-export const parseDateInfo = (dateStr: string): { month: number; year: number } => {
+const parseDateInfo = (dateStr: string): { month: number; year: number } => {
   const now = new Date();
   const defaultRes = { month: now.getMonth(), year: now.getFullYear() };
   if (!dateStr) return defaultRes;
@@ -267,6 +302,1163 @@ export const parseDateInfo = (dateStr: string): { month: number; year: number } 
 
   return defaultRes;
 };
+
+const getMonthIndexFromDate = (dateStr: string): number => {
+  return parseDateInfo(dateStr).month;
+};
+
+// ─── HOME SCREEN ──────────────────────────────────────────────────────────────
+interface HomeScreenProps {
+  wallets: Wallet[];
+  transactions: Transaction[];
+  budget: number;
+  onEditBudgetClick: () => void;
+  onAddTransactionClick: () => void;
+  onAddWalletClick: () => void;
+  userName: string;
+  onEditName: () => void;
+  onEditWalletClick: (wallet: Wallet) => void;
+  onDeleteTransaction: (id: number) => void;
+  onEditTransaction: (tx: Transaction) => void;
+}
+
+function HomeScreen({
+  wallets,
+  transactions,
+  budget,
+  onEditBudgetClick,
+  onAddTransactionClick,
+  onAddWalletClick,
+  userName,
+  onEditName,
+  onEditWalletClick,
+  onDeleteTransaction,
+  onEditTransaction,
+}: HomeScreenProps) {
+  const { t, i18n } = useTranslation();
+  const { formatCurrency } = useCurrency();
+  const totalBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
+
+  // Compute current month name, days in month, days remaining, and outcome dynamically
+  const currentDate = new Date();
+  const currentMonthIndex = currentDate.getMonth(); // 0-11
+  const currentYear = currentDate.getFullYear();
+
+  const isVi = i18n.language?.startsWith("vi");
+  const monthNamesVi = [
+    "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+    "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
+  ];
+  const monthNamesEn = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const currentMonthName = isVi ? monthNamesVi[currentMonthIndex] : monthNamesEn[currentMonthIndex];
+
+  const currentMonthDays = new Date(currentYear, currentMonthIndex + 1, 0).getDate();
+  const currentDay = currentDate.getDate();
+  const daysLeft = currentMonthDays - currentDay;
+
+  const currentMonthTransactions = transactions.filter((t) => {
+    const { month: txMonth, year: txYear } = parseDateInfo(t.date);
+    return txMonth === currentMonthIndex && txYear === currentYear;
+  });
+
+  const totalCurrentOutcome = currentMonthTransactions.reduce(
+    (sum, t) => (t.amount < 0 ? sum + Math.abs(t.amount) : sum),
+    0
+  );
+
+  const rawBudgetPct = budget > 0 ? (totalCurrentOutcome / budget) * 100 : 0;
+  const pctSpent = Math.min(Math.round(rawBudgetPct), 100);
+  const overAmount = Math.max(0, totalCurrentOutcome - budget);
+
+  let progressColor: string = C.gold;
+  if (rawBudgetPct >= 100) {
+    progressColor = "#EF4444";
+  } else if (rawBudgetPct >= 80) {
+    progressColor = "#F97316";
+  }
+
+  const getInitials = (name: string) => {
+    if (!name) return "U";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const initials = getInitials(userName);
+
+  return (
+    <div className="flex flex-col">
+      {/* Mobile Header (Hidden on Desktop) */}
+      <div
+        className="px-5 pt-12 pb-6 md:hidden"
+        style={{
+          background: `linear-gradient(180deg, #1C1508 0%, #141008 55%, ${C.bg} 100%)`,
+        }}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            {/* Avatar */}
+            <motion.div
+              className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 cursor-pointer"
+              style={{
+                background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldL} 100%)`,
+                color: C.bg,
+                boxShadow: `0 0 0 2px ${C.bg}, 0 0 0 4px ${C.gold}55`,
+              }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onEditName}
+            >
+              {initials}
+            </motion.div>
+            <div>
+              <p
+                className="text-[12px] font-medium mb-0.5"
+                style={{ color: C.tm }}
+              >
+                {t("dashboard.totalBalance")}
+              </p>
+              <div className="flex items-baseline gap-0.5">
+                <span
+                  className="text-[24px] md:text-[28px] font-bold tracking-tight leading-none"
+                  style={{ color: C.white }}
+                >
+                  {formatCurrency(totalBalance)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 mt-1">
+                <ArrowDownRight size={12} color={C.red} strokeWidth={2.5} />
+                <span className="text-[12px]" style={{ color: C.tm }}>
+                  {formatCurrency(totalCurrentOutcome)} · {currentMonthName} {currentYear}
+                </span>
+              </div>
+            </div>
+          </div>
+          <motion.button
+            className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 cursor-pointer"
+            style={{ background: C.gold }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            onClick={onAddTransactionClick}
+          >
+            <Plus size={20} color={C.bg} strokeWidth={2.5} />
+          </motion.button>
+        </div>
+      </div>
+
+      <div className="px-5 md:px-0 flex flex-col md:grid md:grid-cols-12 gap-5 md:gap-8 pb-6">
+        {/* Left Column: Budget & Wallets */}
+        <div className="flex flex-col gap-5 md:gap-8 md:col-span-8">
+          {/* Budget Card */}
+          <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }} className="cursor-pointer">
+            <Card className="p-4 md:p-6">
+              <div className="flex items-center justify-between mb-1">
+                <span
+                  className="text-[15px] md:text-[17px] font-semibold"
+                  style={{ color: C.white }}
+                >
+                  {currentMonthName} - {t("dashboard.monthlyBudget")}
+                </span>
+                <span
+                  className="text-[13px] font-bold px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-gold/20 transition-colors"
+                  style={{ background: C.gold + "22", color: C.gold }}
+                  onClick={onEditBudgetClick}
+                >
+                  {pctSpent}% ({t("common.edit")})
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span
+                  className="text-[22px] md:text-[28px] font-bold"
+                  style={{ color: C.gold }}
+                >
+                  {formatCurrency(totalCurrentOutcome)}
+                </span>
+                <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
+                  / {formatCurrency(budget)}
+                </span>
+              </div>
+              <ProgressBar value={totalCurrentOutcome} max={budget} color={progressColor} />
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-[12px] md:text-[14px]" style={{ color: C.tm }}>
+                  {t("dashboard.dailyAvg")}: {formatCurrency(totalCurrentOutcome / currentMonthDays)} – {t("dashboard.limit")}: {formatCurrency(budget / currentMonthDays)}
+                </span>
+                <span
+                  className="text-[12px] md:text-[14px] font-semibold"
+                  style={{ color: C.t2 }}
+                >
+                  {daysLeft === 0 ? t("dashboard.lastDayOfMonth") : `${daysLeft} ${t("dashboard.daysLeft")}`}
+                </span>
+              </div>
+
+              {/* Alert Banner */}
+              {rawBudgetPct >= 100 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="alert-banner mt-3.5 p-3 md:p-3.5 rounded-xl border flex items-center gap-2.5 font-sans"
+                  style={{
+                    background: "#EF44441A",
+                    borderColor: "#EF444440",
+                    color: "#F87171",
+                  }}
+                >
+                  <span className="text-xs md:text-sm font-bold leading-relaxed">
+                    {t("dashboard.budgetAlertDanger", {
+                      amount: formatCurrency(overAmount),
+                    })}
+                  </span>
+                </motion.div>
+              ) : rawBudgetPct >= 80 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="alert-banner mt-3.5 p-3 md:p-3.5 rounded-xl border flex items-center gap-2.5 font-sans text-xs md:text-sm font-medium"
+                  style={{
+                    background: "#F973161A",
+                    borderColor: "#F9731640",
+                    color: "#FB923C",
+                  }}
+                >
+                  <span className="leading-relaxed">
+                    {t("dashboard.budgetAlertWarning", {
+                      percent: Math.round(rawBudgetPct),
+                    })}
+                  </span>
+                </motion.div>
+              ) : null}
+            </Card>
+          </motion.div>
+
+          {/* Wallets */}
+          <div>
+            <SectionHeader title={t("dashboard.activeWallets")} actionLabel={`+ ${t("common.add")}`} onAction={onAddWalletClick} />
+            {wallets.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center gap-3 py-8 px-4 rounded-2xl border border-dashed"
+                style={{ borderColor: C.border, background: C.card + "60" }}
+              >
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: C.gold + "18" }}>
+                  <CreditCard size={22} color={C.gold} strokeWidth={1.8} />
+                </div>
+                <p className="text-[13px] font-medium text-center" style={{ color: C.tm }}>{t("dashboard.noWallets")}</p>
+              </motion.div>
+            ) : (
+              <div
+                className="flex md:grid md:grid-cols-3 gap-4 pb-1 -mx-5 px-5 md:mx-0 md:px-0"
+                style={{ overflowX: "auto", scrollbarWidth: "none" }}
+              >
+                {wallets.map((w, idx) => (
+                  <motion.div
+                    key={w.id}
+                    onClick={() => onEditWalletClick(w)}
+                    className="flex-shrink-0 w-52 md:w-auto p-5 rounded-2xl cursor-pointer relative overflow-hidden group border transition-all duration-300"
+                    style={{
+                      background: `linear-gradient(135deg, ${w.accent}22 0%, rgba(20, 20, 24, 0.95) 100%)`,
+                      borderColor: `${w.accent}44`,
+                      boxShadow: `0 8px 24px ${w.accent}12`,
+                    }}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.08, duration: 0.35 }}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {/* Card Background Glow */}
+                    <div
+                      className="absolute -right-10 -bottom-10 w-28 h-28 rounded-full pointer-events-none filter blur-2xl opacity-40 transition-opacity group-hover:opacity-70"
+                      style={{ background: w.accent }}
+                    />
+                    <div className="flex items-center justify-between mb-4 relative z-10">
+                      <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full" style={{ background: w.accent + "25", color: w.accent }}>
+                        {t("common.card")}
+                      </span>
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center shadow-md"
+                        style={{ background: w.accent }}
+                      >
+                        <CreditCard size={13} color={C.bg} strokeWidth={2.5} />
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-0.5 mb-2 relative z-10">
+                      <span
+                        className="text-[20px] font-bold tracking-tight"
+                        style={{ color: C.white }}
+                      >
+                        {formatCurrency(w.balance)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between relative z-10">
+                      <p className="text-[12px] font-medium" style={{ color: C.t2 }}>
+                        {w.label}
+                      </p>
+                      <span className="text-[10px] font-mono tracking-widest opacity-60 text-white">
+                        •••• 8842
+                      </span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Transactions */}
+        <div className="md:col-span-4 flex flex-col gap-4">
+          <SectionHeader title={t("dashboard.recentTransactions")} />
+          <p
+            className="text-[12px] font-semibold mb-1"
+            style={{ color: C.tm }}
+          >
+            {t("common.today")}
+          </p>
+          <Card className="overflow-hidden">
+            {transactions.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center p-8 text-center text-sm font-sans"
+                style={{ color: C.tm, background: C.card }}
+              >
+                <TrendingUp size={32} color={C.tm} className="opacity-50 mb-3" />
+                {t("dashboard.noTransactions")}
+              </div>
+            ) : (
+              transactions.map((tx, i) => {
+                const isPositive = tx.amount > 0;
+                const IconComponent = categoryIcons[tx.category] || categoryIcons.Others;
+                const iconColor = categoryColors[tx.category] || categoryColors.Others;
+                return (
+                  <motion.div
+                    key={tx.id}
+                    onClick={() => onEditTransaction(tx)}
+                    className="flex items-center gap-3 px-4 py-3.5 group transition-colors relative cursor-pointer"
+                    style={{
+                      borderBottom:
+                        i < transactions.length - 1
+                          ? `1px solid ${C.border}`
+                          : "none",
+                    }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 + i * 0.06, duration: 0.18 }}
+                    whileHover={{ scale: 1.01, backgroundColor: C.surf + "60" }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
+                      style={{ background: iconColor + "1a" }}
+                    >
+                      <IconComponent
+                        size={16}
+                        color={iconColor}
+                        strokeWidth={2}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-[14px] font-semibold truncate"
+                        style={{ color: C.white }}
+                      >
+                        {tx.name}
+                      </p>
+                      <p
+                        className="text-[12px] mt-0.5"
+                        style={{ color: C.tm }}
+                      >
+                        {tx.date}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isPositive ? (
+                        <ArrowUpRight size={13} color={C.green} strokeWidth={2.5} />
+                      ) : (
+                        <ArrowDownRight size={13} color={C.red} strokeWidth={2.5} />
+                      )}
+                      <span
+                        className="text-[14px] font-bold font-mono"
+                        style={{ color: isPositive ? C.green : C.red }}
+                      >
+                        {isPositive ? "+" : "-"}{formatCurrency(Math.abs(tx.amount))}
+                      </span>
+                      {/* Action buttons – shows on hover */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1">
+                        <motion.button
+                          onClick={(e) => { e.stopPropagation(); onEditTransaction(tx); }}
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+                          style={{ background: C.gold + "22" }}
+                          whileHover={{ scale: 1.15, background: C.gold + "44" }}
+                          whileTap={{ scale: 0.9 }}
+                          title={t("common.edit")}
+                        >
+                          <Edit2 size={11} color={C.gold} strokeWidth={2.5} />
+                        </motion.button>
+                        <motion.button
+                          onClick={(e) => { e.stopPropagation(); onDeleteTransaction(tx.id); }}
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+                          style={{ background: "#FF453A22" }}
+                          whileHover={{ scale: 1.15, background: "#FF453A44" }}
+                          whileTap={{ scale: 0.9 }}
+                          title={t("common.delete")}
+                        >
+                          <Trash2 size={11} color="#FF453A" strokeWidth={2.5} />
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STATISTICS SCREEN ────────────────────────────────────────────────────────
+interface StatisticsScreenProps {
+  wallets: Wallet[];
+  transactions: Transaction[];
+  budget: number;
+  savingsGoals: SavingsGoal[];
+  availableBalance: number;
+  totalBalance: number;
+  onAddGoalClick: () => void;
+  onDeposit: (goalId: number, amount: number) => void;
+  onWithdraw: (goalId: number, amount: number) => void;
+  onDeleteGoal: (goalId: number) => void;
+  onDeleteTransaction: (id: number) => void;
+  onEditTransaction?: (tx: Transaction) => void;
+}
+
+
+function StatisticsScreen({
+  wallets,
+  transactions,
+  budget,
+  savingsGoals,
+  availableBalance,
+  totalBalance,
+  onAddGoalClick,
+  onDeposit,
+  onWithdraw,
+  onDeleteGoal,
+  onDeleteTransaction,
+  onEditTransaction,
+}: StatisticsScreenProps) {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+  const [statsSubTab, setStatsSubTab] = useState<number>(0);
+
+  // Compute dynamic chart data based on transactions
+  const computedChartData = initialChartData.map((item, idx) => {
+    const monthTx = transactions.filter((t) => getMonthIndexFromDate(t.date) === idx);
+    let extraIncome = 0;
+    let extraOutcome = 0;
+    monthTx.forEach((t) => {
+      if (t.amount > 0) {
+        extraIncome += t.amount;
+      } else {
+        extraOutcome += Math.abs(t.amount);
+      }
+    });
+
+    return {
+      ...item,
+      income: extraIncome,
+      outcome: extraOutcome,
+      savings: Math.max(0, extraIncome - extraOutcome),
+    };
+  });
+
+  const activeMonthData = computedChartData[selectedMonth] || { income: 0, outcome: 0, savings: 0 };
+
+  // Calculate dynamic budget details for the selected month
+  const monthTransactions = transactions.filter((t) => getMonthIndexFromDate(t.date) === selectedMonth);
+  const totalMonthOutcome = monthTransactions.reduce(
+    (sum, t) => (t.amount < 0 ? sum + Math.abs(t.amount) : sum),
+    0
+  );
+  const pctSpent = budget > 0 ? Math.min(Math.round((totalMonthOutcome / budget) * 100), 100) : 0;
+  const saved = Math.max(0, budget - totalMonthOutcome);
+
+  // Dynamic spending categories for selected month
+  const categoryTotals: Record<string, number> = {};
+  let monthTotalExpenses = 0;
+  monthTransactions.forEach((t) => {
+    if (t.amount < 0) {
+      const amt = Math.abs(t.amount);
+      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + amt;
+      monthTotalExpenses += amt;
+    }
+  });
+
+  const sortedCategories = Object.entries(categoryTotals)
+    .map(([name, amount]) => {
+      const pct = monthTotalExpenses > 0 ? Math.round((amount / monthTotalExpenses) * 100) : 0;
+      return {
+        name,
+        amount,
+        pct,
+        color: categoryColors[name] || categoryColors.Others,
+        Icon: categoryIcons[name] || categoryIcons.Others,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  return (
+    <div className="flex flex-col">
+      {/* Mobile Header (Hidden on Desktop) */}
+      <div className="px-5 pt-2 pb-5 md:hidden">
+        <h1
+          className="text-[22px] font-bold tracking-tight"
+          style={{ color: C.white }}
+        >
+          Statistics
+        </h1>
+      </div>
+
+      {/* Segmented Switcher */}
+      <div className="px-5 md:px-0 pb-4">
+        <div
+          className="flex rounded-2xl p-1 gap-1"
+          style={{ background: C.card, border: `1px solid ${C.border}` }}
+        >
+          {[
+            { id: 0, label: t("stats.tabStats"), shortLabel: t("stats.tabStats"), icon: BarChart2 },
+            { id: 1, label: t("stats.tabCashFlow"), shortLabel: t("stats.tabCashFlowShort"), icon: Calendar },
+            { id: 2, label: t("stats.tabSavings"), shortLabel: t("stats.tabSavingsShort"), icon: PiggyBank },
+          ].map((tab) => {
+            const IconComp = tab.icon;
+            const isActive = statsSubTab === tab.id;
+            return (
+              <motion.button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatsSubTab(tab.id)}
+                whileTap={{ scale: 0.97 }}
+                className="flex-1 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 text-[11px] sm:text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative whitespace-nowrap min-w-0"
+                style={{
+                  background: isActive ? C.gold : "transparent",
+                  color: isActive ? C.bg : C.tm,
+                  boxShadow: isActive ? "0 2px 10px rgba(201, 164, 91, 0.25)" : "none",
+                }}
+              >
+                <IconComp size={14} strokeWidth={2.2} className="shrink-0" />
+                <span className="truncate sm:hidden">{tab.shortLabel}</span>
+                <span className="hidden truncate sm:inline">{tab.label}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {statsSubTab === 1 && (
+        <div className="px-5 md:px-0 pb-6">
+          <CashFlowCalendar
+            transactions={transactions}
+            wallets={wallets}
+            onDeleteTransaction={onDeleteTransaction}
+            onEditTransaction={onEditTransaction}
+          />
+        </div>
+      )}
+
+      {statsSubTab === 2 && (
+        <div className="px-5 md:px-0 pb-6">
+          <SavingsGoalsScreen
+            goals={savingsGoals}
+            availableBalance={availableBalance}
+            totalBalance={totalBalance}
+            onAddGoalClick={onAddGoalClick}
+            onDeposit={onDeposit}
+            onWithdraw={onWithdraw}
+            onDelete={onDeleteGoal}
+          />
+        </div>
+      )}
+
+      {statsSubTab === 0 && (
+        <div className="space-y-4 px-4 pb-6 sm:px-5 md:px-0">
+          <MonthSelector selected={selectedMonth} onChange={setSelectedMonth} months={months} year={new Date().getFullYear()} />
+          <MonthlyStatisticsDashboard
+            monthLabel={new Date(new Date().getFullYear(), selectedMonth, 1).toLocaleString(undefined, { month: "long" })}
+            monthShortLabel={months[selectedMonth]}
+            year={new Date().getFullYear()}
+            income={activeMonthData.income}
+            spending={activeMonthData.outcome}
+            savings={activeMonthData.savings}
+            budget={budget}
+            budgetPercent={pctSpent}
+            dailyLimit={budget / 30}
+            savedBudget={saved}
+            transactionCount={monthTransactions.length}
+            averageExpense={monthTotalExpenses > 0 ? monthTotalExpenses / monthTransactions.filter((transaction) => transaction.amount < 0).length : 0}
+            categories={sortedCategories.map(({ name, amount, pct, color }) => ({ name, amount, pct, color }))}
+            formatCurrency={formatCurrency}
+            copy={{
+              monthlyBreakdown: t("stats.monthlyBreakdown"), netBalance: t("stats.netBalance"), income: t("stats.income"), spending: t("stats.outcome"), savings: t("stats.savings"), spendingFocus: t("stats.spendingFocus"), whereMoneyWent: t("stats.mostMoneyGoesTo"), spendingPercent: t("stats.spendingPercent"), monthlySnapshot: t("stats.monthlySnapshot"), quietMonth: t("stats.quietMonth"), transactions: t("stats.transactions"), averageExpense: t("stats.averageExpense"), monthlyBudget: t("stats.monthlyBudget"), dailyLimit: t("stats.dailyLimit"), saved: t("stats.saved"), atAGlance: t("stats.atAGlance"), savingsRate: t("stats.savingsRate"), categories: t("stats.categories"), noExpenses: t("stats.noExpenses"),
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const goalIconOptions = [
+  { key: "PiggyBank", Icon: PiggyBank, label: "Hũ" },
+  { key: "Car", Icon: Car, label: "Xe" },
+  { key: "House", Icon: House, label: "Nhà" },
+  { key: "TrendingUp", Icon: TrendingUp, label: "Đầu tư" },
+  { key: "ShoppingBag", Icon: ShoppingBag, label: "Mua sắm" },
+  { key: "CreditCard", Icon: CreditCard, label: "Thẻ" },
+  { key: "Target", Icon: Target, label: "Mục tiêu" },
+  { key: "Trophy", Icon: Trophy, label: "Thành tích" },
+];
+
+const goalColorOptions = [
+  { label: "Gold", value: C.gold },
+  { label: "Purple", value: C.purple },
+  { label: "Green", value: C.green },
+  { label: "Red", value: C.red },
+  { label: "Blue", value: "#3B82F6" },
+  { label: "Pink", value: "#EC4899" },
+];
+
+function resolveGoalIcon(iconKey: string) {
+  return goalIconOptions.find((o) => o.key === iconKey)?.Icon || PiggyBank;
+}
+
+// ─── GOAL CARD ────────────────────────────────────────────────────────────────
+function SavingsGoalCard({
+  goal,
+  onClick,
+}: {
+  goal: SavingsGoal;
+  onClick: (g: SavingsGoal) => void;
+}) {
+  const { formatCurrency } = useCurrency();
+  const { t } = useTranslation();
+  const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
+  const targetAmount = typeof goal?.targetAmount === "number" ? goal.targetAmount : Number(goal?.targetAmount) || 0;
+  const pct = targetAmount > 0
+    ? Math.min(100, Math.round((currentAmount / targetAmount) * 100))
+    : 0;
+  const GoalIcon = resolveGoalIcon(goal?.icon || "PiggyBank");
+  const isCompleted = goal?.status === "COMPLETED";
+  const daysLeftRaw = goal?.deadline
+    ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / 86400000)
+    : null;
+  const daysLeft = daysLeftRaw !== null && !isNaN(daysLeftRaw) ? Math.max(0, daysLeftRaw) : null;
+  const color = goal?.color || C.gold;
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => onClick(goal)}
+      className="cursor-pointer"
+    >
+      <Card className="p-5" style={{ position: "relative", overflow: "hidden" }}>
+        {isCompleted && (
+          <div
+            className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold flex items-center gap-1"
+            style={{ background: C.green, color: C.bg }}
+          >
+            <Trophy size={10} /> DONE
+          </div>
+        )}
+
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-11 h-11 rounded-2xl flex items-center justify-center"
+              style={{ background: color + "22" }}
+            >
+              <GoalIcon size={20} color={color} strokeWidth={2} />
+            </div>
+            <div>
+              <p className="text-[15px] font-semibold" style={{ color: C.white }}>
+                {goal?.title || t("stats.goal")}
+              </p>
+              {daysLeft !== null && (
+                <p className="text-[11px] mt-0.5" style={{ color: isCompleted ? C.green : daysLeft < 30 ? C.red : C.tm }}>
+                  {isCompleted ? t("stats.completedExclamation") : daysLeft === 0 ? t("stats.expiredToday") : t("stats.daysRemaining", { count: daysLeft })}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[18px] font-bold" style={{ color: color }}>
+              {pct}%
+            </p>
+          </div>
+        </div>
+
+        {/* Gradient Progress Bar */}
+        <div
+          className="h-2.5 rounded-full overflow-hidden mb-3"
+          style={{ background: C.surf }}
+        >
+          <motion.div
+            className="h-full rounded-full"
+            style={{
+              background: isCompleted
+                ? `linear-gradient(90deg, ${C.green} 0%, ${C.goldL} 100%)`
+                : `linear-gradient(90deg, ${color} 0%, ${color}bb 100%)`,
+            }}
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[12px]" style={{ color: C.tm }}>
+            {formatCurrency(currentAmount)}
+          </span>
+          <span className="text-[12px] font-semibold" style={{ color: C.t2 }}>
+            / {formatCurrency(targetAmount)}
+          </span>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ─── GOAL ACTION MODAL ────────────────────────────────────────────────────────
+function GoalActionModal({
+  goal,
+  availableBalance,
+  onDeposit,
+  onWithdraw,
+  onDelete,
+  onClose,
+}: {
+  goal: SavingsGoal;
+  availableBalance: number;
+  onDeposit: (goalId: number, amount: number) => void;
+  onWithdraw: (goalId: number, amount: number) => void;
+  onDelete: (goalId: number) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
+  const [amount, setAmount] = useState("");
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+  const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
+  const targetAmount = typeof goal?.targetAmount === "number" ? goal.targetAmount : Number(goal?.targetAmount) || 0;
+  const pct = targetAmount > 0
+    ? Math.min(100, Math.round((currentAmount / targetAmount) * 100))
+    : 0;
+  const color = goal?.color || C.gold;
+  const GoalIcon = resolveGoalIcon(goal?.icon || "PiggyBank");
+
+  const handleSubmit = () => {
+    const num = parseFloat(amount);
+    if (isNaN(num) || num <= 0) return;
+    if (mode === "deposit") {
+      if (num > availableBalance) return;
+      onDeposit(goal.id, num);
+    } else {
+      if (num > currentAmount) return;
+      onWithdraw(goal.id, num);
+    }
+    onClose();
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Goal Info */}
+      <div className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: C.surf }}>
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: color + "22" }}>
+          <GoalIcon size={20} color={color} strokeWidth={2} />
+        </div>
+        <div className="flex-1">
+          <p className="text-[15px] font-semibold" style={{ color: C.white }}>{goal?.title || "Mục tiêu"}</p>
+          <p className="text-[12px]" style={{ color: C.tm }}>
+            {formatCurrency(currentAmount)} / {formatCurrency(targetAmount)} · {pct}%
+          </p>
+        </div>
+      </div>
+
+      {/* Mode Switcher */}
+      <div className="flex gap-2 p-1 rounded-xl" style={{ background: C.surf }}>
+        {(["deposit", "withdraw"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className="flex-1 py-2 rounded-lg text-[13px] font-semibold transition-all cursor-pointer"
+            style={{
+              background: mode === m ? (m === "deposit" ? C.green : C.red) : "transparent",
+              color: mode === m ? C.bg : C.tm,
+            }}
+          >
+            {m === "deposit" ? `💰 ${t("stats.deposit")}` : `💸 ${t("stats.withdraw")}`}
+          </button>
+        ))}
+      </div>
+
+      {/* Balance Info */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[12px]" style={{ color: C.tm }}>
+          {mode === "deposit" ? t("stats.availableBalance") : t("stats.goalBalance")}
+        </span>
+        <span className="text-[13px] font-bold" style={{ color: mode === "deposit" ? C.green : C.gold }}>
+          {formatCurrency(mode === "deposit" ? availableBalance || 0 : currentAmount)}
+        </span>
+      </div>
+
+      {/* Amount Input */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+        style={{ background: C.surf, border: `1px solid ${C.border}` }}
+      >
+        <span className="text-[18px] font-bold" style={{ color: C.tm }}>$</span>
+        <input
+          type="number"
+          placeholder="0.00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="flex-1 bg-transparent text-[18px] font-bold outline-none"
+          style={{ color: C.white }}
+          autoFocus
+        />
+      </div>
+
+      {/* Validation error */}
+      {amount && parseFloat(amount) > (mode === "deposit" ? availableBalance : goal.currentAmount) && (
+        <p className="text-[12px]" style={{ color: C.red }}>
+          ⚠ Không đủ {mode === "deposit" ? "số dư khả dụng" : "số dư trong hũ"}
+        </p>
+      )}
+
+      {/* Submit Button */}
+      <button
+        onClick={handleSubmit}
+        className="w-full py-3 rounded-2xl font-bold text-[15px] transition-all cursor-pointer"
+        style={{
+          background: mode === "deposit" ? C.green : C.red,
+          color: C.bg,
+          opacity: !amount || parseFloat(amount) <= 0 ? 0.5 : 1,
+        }}
+      >
+        {mode === "deposit" ? "Nạp tiền vào hũ" : "Rút tiền khỏi hũ"}
+      </button>
+
+      {/* Delete */}
+      <button
+        onClick={() => { onDelete(goal.id); onClose(); }}
+        className="flex items-center justify-center gap-2 text-[13px] font-medium cursor-pointer py-2 rounded-xl transition-all hover:bg-red-500/10"
+        style={{ color: C.red }}
+      >
+        <Trash2 size={14} /> Xóa hũ tiết kiệm này
+      </button>
+    </div>
+  );
+}
+
+// ─── ADD GOAL MODAL ────────────────────────────────────────────────────────────
+function AddGoalModal({
+  onAdd,
+}: {
+  onAdd: (goal: Omit<SavingsGoal, "id" | "status">) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [targetAmount, setTargetAmount] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [selectedIcon, setSelectedIcon] = useState("PiggyBank");
+  const [selectedColor, setSelectedColor] = useState<string>(C.gold);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !targetAmount) return;
+    const num = parseFloat(targetAmount);
+    if (isNaN(num) || num <= 0) return;
+    onAdd({
+      title,
+      targetAmount: num,
+      currentAmount: 0,
+      icon: selectedIcon,
+      color: selectedColor,
+      deadline: deadline || "",
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {/* Icon and Color Row */}
+      <div className="flex flex-col gap-3">
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>CHỌN BIỂU TƯỢNG</label>
+        <div className="flex flex-wrap gap-2">
+          {goalIconOptions.map(({ key, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSelectedIcon(key)}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+              style={{
+                background: selectedIcon === key ? selectedColor + "33" : C.surf,
+                border: `2px solid ${selectedIcon === key ? selectedColor : "transparent"}`,
+              }}
+            >
+              <Icon size={18} color={selectedIcon === key ? selectedColor : C.tm} strokeWidth={2} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>CHỌN MÀU SẮC</label>
+        <div className="flex gap-2">
+          {goalColorOptions.map(({ label, value }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setSelectedColor(value)}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
+              style={{ background: value }}
+            >
+              {selectedColor === value && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l2.5 2.5L10 3" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Title */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>TÊN MỤC TIÊU</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="VD: Mua iPhone 16, Du lịch Nhật..."
+          className="px-4 py-3 rounded-xl text-[14px] outline-none"
+          style={{ background: C.surf, border: `1px solid ${C.border}`, color: C.white }}
+          required
+        />
+      </div>
+
+      {/* Target Amount */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>SỐ TIỀN MỤC TIÊU</label>
+        <div
+          className="flex items-center gap-2 px-4 py-3 rounded-xl"
+          style={{ background: C.surf, border: `1px solid ${C.border}` }}
+        >
+          <span style={{ color: C.tm }}>$</span>
+          <input
+            type="number"
+            value={targetAmount}
+            onChange={(e) => setTargetAmount(e.target.value)}
+            placeholder="0.00"
+            className="flex-1 bg-transparent text-[14px] outline-none"
+            style={{ color: C.white }}
+            required
+          />
+        </div>
+      </div>
+
+      {/* Deadline */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[12px] font-semibold" style={{ color: C.tm }}>NGÀY HẠN ĐỊNH (Tùy chọn)</label>
+        <input
+          type="date"
+          value={deadline}
+          onChange={(e) => setDeadline(e.target.value)}
+          className="px-4 py-3 rounded-xl text-[14px] outline-none"
+          style={{
+            background: C.surf,
+            border: `1px solid ${C.border}`,
+            color: C.white,
+            colorScheme: "dark",
+          }}
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 rounded-2xl font-bold text-[15px] mt-2 cursor-pointer transition-all"
+        style={{ background: C.gold, color: C.bg }}
+      >
+        Tạo hũ tiết kiệm
+      </button>
+    </form>
+  );
+}
+
+// ─── SAVINGS GOALS SCREEN ──────────────────────────────────────────────────────
+interface SavingsGoalsScreenProps {
+  goals: SavingsGoal[];
+  availableBalance: number;
+  totalBalance: number;
+  onAddGoalClick: () => void;
+  onDeposit: (goalId: number, amount: number) => void;
+  onWithdraw: (goalId: number, amount: number) => void;
+  onDelete: (goalId: number) => void;
+}
+
+function SavingsGoalsScreen({
+  goals,
+  availableBalance,
+  totalBalance,
+  onAddGoalClick,
+  onDeposit,
+  onWithdraw,
+  onDelete,
+}: SavingsGoalsScreenProps) {
+  const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+
+  const totalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
+  const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
+  const completedCount = goals.filter((g) => g.status === "COMPLETED").length;
+  const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Summary Banner */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[12px] font-medium mb-0.5" style={{ color: C.tm }}>{t("stats.availableBalance")}</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[26px] font-bold tracking-tight" style={{ color: C.white }}>
+                {formatCurrency(availableBalance)}
+              </span>
+            </div>
+            <p className="text-[11px] mt-1" style={{ color: C.tm }}>
+              {t("stats.totalBalance")}:{" "}
+              <span style={{ color: C.t2, fontWeight: 600 }}>{formatCurrency(totalBalance)}</span>
+            </p>
+          </div>
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center"
+            style={{ background: C.gold + "1a" }}
+          >
+            <PiggyBank size={26} color={C.gold} strokeWidth={1.8} />
+          </div>
+        </div>
+
+        {/* Progress Overview */}
+        {goals.length > 0 && (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px]" style={{ color: C.tm }}>
+                {t("stats.totalProgress")}: {formatCurrency(totalSaved)} / {formatCurrency(totalTarget)}
+              </span>
+              <span className="text-[12px] font-bold" style={{ color: C.gold }}>{overallPct}%</span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: C.surf }}>
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: `linear-gradient(90deg, ${C.gold} 0%, ${C.green} 100%)` }}
+                initial={{ width: 0 }}
+                animate={{ width: `${overallPct}%` }}
+                transition={{ duration: 1, ease: "easeOut" }}
+              />
+            </div>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ background: C.gold }} />
+                <span className="text-[11px]" style={{ color: C.tm }}>{goals.length} {t("stats.goals")}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ background: C.green }} />
+                <span className="text-[11px]" style={{ color: C.tm }}>{completedCount} {t("stats.completed")}</span>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* Goals Grid */}
+      {goals.length === 0 ? (
+        <Card className="p-10 flex flex-col items-center text-center">
+          <div
+            className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4"
+            style={{ background: C.gold + "1a" }}
+          >
+            <PiggyBank size={32} color={C.gold} strokeWidth={1.8} />
+          </div>
+          <h3 className="text-[18px] font-bold mb-2" style={{ color: C.white }}>
+            {t("stats.noSavingsGoals")}
+          </h3>
+          <p className="text-[13px] mb-6 max-w-xs" style={{ color: C.tm }}>
+            {t("stats.createSavingsGoalHint")}
+          </p>
+          <motion.button
+            onClick={onAddGoalClick}
+            className="px-6 py-3 rounded-2xl font-bold text-[14px] flex items-center gap-2 cursor-pointer"
+            style={{ background: C.gold, color: C.bg }}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+          >
+            <Plus size={16} />
+            {t("stats.createFirstGoal")}
+          </motion.button>
+        </Card>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <h3 className="text-[15px] font-semibold" style={{ color: C.white }}>
+              {t("stats.savingsGoalList")}
+            </h3>
+            <motion.button
+              onClick={onAddGoalClick}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold cursor-pointer"
+              style={{ background: C.gold + "22", color: C.gold, border: `1px solid ${C.gold}33` }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Plus size={13} /> {t("stats.addGoal")}
+            </motion.button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {goals.map((goal) => (
+              <SavingsGoalCard
+                key={goal.id}
+                goal={goal}
+                onClick={setSelectedGoal}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Goal Action Modal */}
+      <AnimatePresence>
+        {selectedGoal && (
+          <Modal
+            isOpen={!!selectedGoal}
+            onClose={() => setSelectedGoal(null)}
+            title={selectedGoal.title}
+          >
+            <GoalActionModal
+              goal={selectedGoal}
+              availableBalance={availableBalance}
+              onDeposit={onDeposit}
+              onWithdraw={onWithdraw}
+              onDelete={onDelete}
+              onClose={() => setSelectedGoal(null)}
+            />
+          </Modal>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ─── BOTTOM NAVIGATION ────────────────────────────────────────────────────────
 const navTabs = [
@@ -457,6 +1649,7 @@ function Sidebar({
 }
 
 import { useCurrency } from "./context/CurrencyContext";
+import { parseAmountInput, toDisplayedAmount, toStoredAmount } from "./context/currencyAmounts";
 
 function LanguageToggle() {
   const { i18n } = useTranslation();
@@ -525,7 +1718,7 @@ function SettingsForm({
         e.preventDefault();
         onSave(key);
       }}
-      className="flex flex-col gap-4 text-white text-sm"
+      className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]"
     >
       <div className="flex flex-col gap-2">
         <label className="text-[12px] font-semibold text-tm">GEMINI API KEY</label>
@@ -534,7 +1727,7 @@ function SettingsForm({
           value={key}
           onChange={(e) => setKey(e.target.value)}
           placeholder="Dán Gemini API Key của bạn vào đây..."
-          className="w-full px-4 py-3 rounded-xl outline-none border text-white bg-surf"
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-3 text-[var(--paper-ink)] outline-none"
           style={{ borderColor: C.border }}
         />
         <p className="text-[11px] text-tm leading-relaxed mt-1">
@@ -557,7 +1750,7 @@ function SettingsForm({
 }
 
 // ─── MODAL COMPONENTS ─────────────────────────────────────────────────────────
-export function Modal({
+function Modal({
   isOpen,
   onClose,
   title,
@@ -582,7 +1775,7 @@ export function Modal({
           />
           {/* Dialog Container */}
           <motion.div
-            className="relative w-full max-w-md overflow-hidden rounded-3xl p-6 shadow-2xl border"
+            className="paper-ledger paper-dialog relative w-full max-w-md overflow-hidden rounded-3xl p-6 shadow-2xl border"
             style={{ background: C.card, borderColor: C.border }}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -590,10 +1783,10 @@ export function Modal({
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[18px] font-bold text-white">{title}</h3>
+              <h3 className="text-[18px] font-bold text-[var(--paper-ink)]" style={{ color: C.high }}>{title}</h3>
               <button
                 onClick={onClose}
-                className="text-[13px] font-medium text-tm hover:text-white px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                className="cursor-pointer rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
               >
                 Close
               </button>
@@ -605,6 +1798,617 @@ export function Modal({
     </AnimatePresence>
   );
 }
+
+function useAutoCategory(title: string, hasManuallySelected: boolean) {
+  const isGuessing = false;
+  const [guessedCategory, setGuessedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!title || title.trim().length < 2 || hasManuallySelected) {
+      setGuessedCategory(null);
+      return;
+    }
+
+    setGuessedCategory(classifyTransactionCategory(title));
+  }, [title, hasManuallySelected]);
+
+  return { isGuessing, guessedCategory };
+}
+
+function AddTransactionForm({
+  wallets,
+  onAdd,
+}: {
+  wallets: Wallet[];
+  onAdd: (tx: Omit<Transaction, "id">, walletId: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { formatCurrency, currency } = useCurrency();
+
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState<"income" | "outcome">("outcome");
+  const [category, setCategory] = useState("Others");
+  const [walletId, setWalletId] = useState(wallets[0]?.id || 1);
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().split("T")[0];
+  });
+  const [hasManuallySelected, setHasManuallySelected] = useState(false);
+
+  const { isGuessing, guessedCategory } = useAutoCategory(name, hasManuallySelected);
+
+  const categories = [
+    "Food",
+    "Drinks",
+    "Groceries",
+    "Shopping",
+    "Fuel",
+    "Housing",
+    "Entertainment",
+    "Salary",
+    "Bank",
+    "Investment",
+    "Others",
+  ];
+
+  useEffect(() => {
+    if (guessedCategory && !hasManuallySelected) {
+      const matchedCat = categories.find(c => c.toLowerCase() === guessedCategory.toLowerCase()) || "Others";
+      setCategory(matchedCat);
+    }
+  }, [guessedCategory, hasManuallySelected]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !amount) return;
+    const numAmt = parseAmountInput(amount);
+    if (isNaN(numAmt) || numAmt <= 0) return;
+
+    const finalAmount = toStoredAmount(type === "outcome" ? -numAmt : numAmt, currency);
+    onAdd({
+      name,
+      amount: finalAmount,
+      category,
+      // Keep the native date input's ISO value. Postgres date columns and the
+      // transaction RPC expect YYYY-MM-DD; converting to DD-MM-YYYY makes
+      // previous-day transactions fail to save (or be parsed ambiguously).
+      date,
+      walletId,
+    }, walletId);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]" style={{ color: "var(--paper-ink)" }}>
+      <div className="flex gap-2 rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] p-1">
+        <button
+          type="button"
+          onClick={() => setType("outcome")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "outcome" ? "var(--paper-ink)" : "transparent",
+            color: type === "outcome" ? "white" : "var(--paper-muted)",
+          }}
+        >
+          {t("stats.outcome")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setType("income")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "income" ? "var(--paper-sage-soft)" : "transparent",
+            color: type === "income" ? "var(--paper-ink)" : "var(--paper-muted)",
+          }}
+        >
+          {t("stats.income")}
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.description")}
+        </label>
+        <input
+          type="text"
+          required
+          placeholder=""
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (e.target.value.trim() === "") {
+              setHasManuallySelected(false);
+            }
+          }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+            {t("dashboard.amount")}
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          required
+          placeholder="0"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-[var(--paper-muted)]">
+            {t("dashboard.category")}
+          </label>
+          {isGuessing && (
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-[var(--paper-warning)] animate-pulse">
+              <Loader2 size={11} className="animate-spin text-[var(--paper-warning)]" />
+              <span>Gợi ý danh mục...</span>
+            </div>
+          )}
+        </div>
+        <select
+          value={category}
+          onChange={(e) => {
+            setHasManuallySelected(true);
+            setCategory(e.target.value);
+          }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat} className="bg-sec">
+              {cat}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.payWith")}
+        </label>
+        <select
+          value={walletId}
+          onChange={(e) => setWalletId(Number(e.target.value))}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
+        >
+          {wallets.map((w) => (
+            <option key={w.id} value={w.id} className="bg-sec">
+              {w.label} ({formatCurrency(w.balance)})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.date")}
+        </label>
+        <input
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer"
+        style={{ background: "var(--paper-ink)", color: "white" }}
+      >
+        {t("dashboard.saveTransaction")}
+      </button>
+    </form>
+  );
+}
+
+function EditTransactionForm({
+  transaction,
+  wallets,
+  onSave,
+  onDelete,
+}: {
+  transaction: Transaction;
+  wallets: Wallet[];
+  onSave: (updatedTx: Transaction) => void;
+  onDelete?: (id: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { formatCurrency, currency } = useCurrency();
+
+  const [name, setName] = useState(transaction.name);
+  const [amount, setAmount] = useState(String(toDisplayedAmount(Math.abs(transaction.amount), currency)));
+  const [type, setType] = useState<"income" | "outcome">(
+    transaction.amount < 0 ? "outcome" : "income"
+  );
+  const [category, setCategory] = useState(transaction.category || "Others");
+  const [walletId, setWalletId] = useState(transaction.walletId || wallets[0]?.id || 1);
+
+  // Convert DD-MM-YYYY or ISO format to YYYY-MM-DD for <input type="date" />
+  const [date, setDate] = useState(() => {
+    if (!transaction.date) return new Date().toISOString().split("T")[0];
+    const cleanDate = transaction.date.split("T")[0].trim();
+    const parts = cleanDate.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
+    }
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const categories = [
+    "Food",
+    "Drinks",
+    "Groceries",
+    "Shopping",
+    "Fuel",
+    "Housing",
+    "Entertainment",
+    "Salary",
+    "Bank",
+    "Investment",
+    "Others",
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !amount) return;
+    const numAmt = parseAmountInput(amount);
+    if (isNaN(numAmt) || numAmt <= 0) return;
+
+    const finalAmount = toStoredAmount(type === "outcome" ? -numAmt : numAmt, currency);
+    onSave({
+      ...transaction,
+      name,
+      amount: finalAmount,
+      category,
+      date,
+      walletId,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
+      <div className="flex gap-2 p-1 rounded-xl bg-surf">
+        <button
+          type="button"
+          onClick={() => setType("outcome")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "outcome" ? C.red : "transparent",
+            color: type === "outcome" ? C.white : C.tm,
+          }}
+        >
+          {t("stats.outcome")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setType("income")}
+          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
+          style={{
+            background: type === "income" ? C.green : "transparent",
+            color: type === "income" ? C.bg : C.tm,
+          }}
+        >
+          {t("stats.income")}
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.description")}
+        </label>
+        <input
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+            {t("dashboard.amount")}
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+            {t("dashboard.category")}
+        </label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat} className="bg-sec">
+              {cat}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.payWith")}
+        </label>
+        <select
+          value={walletId}
+          onChange={(e) => setWalletId(Number(e.target.value))}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        >
+          {wallets.map((w) => (
+            <option key={w.id} value={w.id} className="bg-sec">
+              {w.label} ({formatCurrency(w.balance)})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">
+          {t("dashboard.date")}
+        </label>
+        <input
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex items-center gap-3 mt-2">
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(transaction.id)}
+            className="flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30"
+          >
+            {t("common.delete")}
+          </button>
+        )}
+        <button
+          type="submit"
+          className="flex-[2] py-3 rounded-xl font-bold transition-all cursor-pointer"
+          style={{ background: C.gold, color: C.bg }}
+        >
+          {t("dashboard.saveTransaction")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AddWalletForm({
+  onAdd,
+}: {
+  onAdd: (wallet: Omit<Wallet, "id">) => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [balance, setBalance] = useState("");
+  const [accent, setAccent] = useState<string>(C.purple);
+
+  const colors = [
+    { label: "Purple", value: C.purple },
+    { label: "Green", value: C.green },
+    { label: "Gold", value: C.gold },
+    { label: "Red", value: C.red },
+    { label: "Blue", value: "#3B82F6" },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!label || !balance) return;
+    const numBal = parseFloat(balance);
+    if (isNaN(numBal) || numBal < 0) return;
+
+    onAdd({
+      label,
+      balance: numBal,
+      accent,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Wallet Name / Label</label>
+        <input
+          type="text"
+          required
+          placeholder="e.g. Card 5678 or Travel Cash"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Initial Balance ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          required
+          placeholder="0.00"
+          value={balance}
+          onChange={(e) => setBalance(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Accent Color</label>
+        <div className="flex gap-3 py-1">
+          {colors.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setAccent(c.value)}
+              className="w-7 h-7 rounded-full transition-transform relative flex items-center justify-center cursor-pointer"
+              style={{ background: c.value }}
+            >
+              {accent === c.value && (
+                <span className="w-2.5 h-2.5 rounded-full bg-white block" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer"
+        style={{ background: C.gold, color: C.bg }}
+      >
+        Create Wallet
+      </button>
+    </form>
+  );
+}
+
+function EditWalletForm({
+  wallet,
+  onSave,
+  onDelete,
+}: {
+  wallet: Wallet;
+  onSave: (updated: Wallet) => void;
+  onDelete?: (id: number) => void;
+}) {
+  const [label, setLabel] = useState(wallet.label);
+  const [balance, setBalance] = useState(wallet.balance.toString());
+  const [accent, setAccent] = useState(wallet.accent);
+
+  const colors = [
+    { label: "Purple", value: C.purple },
+    { label: "Green", value: C.green },
+    { label: "Gold", value: C.gold },
+    { label: "Red", value: C.red },
+    { label: "Blue", value: "#3B82F6" },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!label || !balance) return;
+    const numBal = parseFloat(balance);
+    if (isNaN(numBal)) return;
+
+    onSave({
+      ...wallet,
+      label,
+      balance: numBal,
+      accent,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Wallet Name / Label</label>
+        <input
+          type="text"
+          required
+          placeholder="e.g. Card 5678 or Travel Cash"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Balance ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          required
+          placeholder="0.00"
+          value={balance}
+          onChange={(e) => setBalance(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium">Accent Color</label>
+        <div className="flex gap-3 py-1">
+          {colors.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setAccent(c.value)}
+              className="w-7 h-7 rounded-full transition-transform relative flex items-center justify-center cursor-pointer"
+              style={{ background: c.value }}
+            >
+              {accent === c.value && (
+                <span className="w-2.5 h-2.5 rounded-full bg-white block" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-3 mt-2">
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(wallet.id)}
+            className="flex-1 py-3 rounded-xl font-bold border border-solid border-red-500/20 text-red-400 hover:text-white hover:bg-red-500/10 cursor-pointer bg-transparent transition-colors"
+          >
+            Delete
+          </button>
+        )}
+        <button
+          type="submit"
+          className="flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer"
+          style={{ background: C.gold, color: C.bg }}
+        >
+          Save Changes
+        </button>
+      </div>
+    </form>
+  );
+}
+
+
 
 function EditProfileForm({
   initialName,
@@ -647,233 +2451,244 @@ function EditProfileForm({
   );
 }
 
+function EditBudgetForm({
+  initialBudget,
+  onSave,
+}: {
+  initialBudget: number;
+  onSave: (newBudget: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { currency } = useCurrency();
+  const [budgetVal, setBudgetVal] = useState(initialBudget === 0 ? "" : toDisplayedAmount(initialBudget, currency).toString());
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = budgetVal.trim() === "" ? 0 : parseFloat(budgetVal);
+    if (!isNaN(val) && val >= 0) {
+      onSave(toStoredAmount(val, currency));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white font-sans">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-tm font-medium uppercase tracking-wider pl-0.5">{t("dashboard.monthlyBudget")} ({currency})</label>
+        <input
+          type="number"
+          step="1"
+          autoFocus
+          value={budgetVal}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => setBudgetVal(e.target.value)}
+          placeholder="0"
+          className="w-full px-4 py-3 rounded-xl outline-none border text-white bg-surf font-semibold transition-all focus:border-gold"
+          style={{ borderColor: C.border }}
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer text-sm"
+        style={{ background: C.gold, color: C.bg }}
+      >
+        Save Budget
+      </button>
+    </form>
+  );
+}
+
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const { t } = useTranslation();
-  const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState(0);
+  const { t, i18n } = useTranslation();
+  const { formatCurrency, currency } = useCurrency();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<AppDestination>("home");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // User Onboarding State (tên hiển thị tùy chỉnh, override tên từ auth)
+  // User Onboarding State
   const [userName, setUserName] = useState<string>(() => {
     return localStorage.getItem("wealthy_user_name") || "";
   });
 
-  // Tên hiển thị: custom name > OAuth full_name > email prefix > "User"
-  const authDisplayName =
-    (user?.user_metadata?.full_name as string | undefined)?.trim() ||
-    user?.email?.split("@")[0] ||
-    "";
-  const displayName = userName || authDisplayName || "User";
-
-  const { session } = useAuth();
-  const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:8080";
-
-  // Offline Cache Helper (Stale-While-Revalidate)
-  const getOfflineCache = () => {
+  // States with localStorage Sync
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
-      const raw = localStorage.getItem("wealthy_offline_cache");
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch {
-      return null;
+      const saved = localStorage.getItem("wealthy_v2_transactions");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error("Error reading transactions from localStorage", e);
     }
-  };
+    return initialTransactions;
+  });
 
-  const initialCache = getOfflineCache();
-
-  // Initial Budget Resolvers (with fallback to wealthy_v2_budget)
-  const getInitialBudget = (): number => {
-    if (typeof initialCache?.budget === "number" && initialCache.budget > 0) {
-      return initialCache.budget;
+  const [wallets, setWallets] = useState<Wallet[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_wallets");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error("Error reading wallets from localStorage", e);
     }
-    const legacy = localStorage.getItem("wealthy_v2_budget");
-    if (legacy) {
-      const parsed = parseFloat(legacy);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+    return initialWallets;
+  });
+
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_savings_goals");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Filter out old demo sample goals if present
+          const cleanGoals = parsed.filter(
+            (g: any) => g?.title !== "Buy Tesla Model 3" && g?.title !== "Emergency Fund"
+          );
+          return cleanGoals.map((g: any, i: number) => ({
+            id: typeof g?.id === "number" ? g.id : i + 1,
+            title: g?.title || "Hũ " + (i + 1),
+            targetAmount: typeof g?.targetAmount === "number" ? g.targetAmount : Number(g?.targetAmount) || 0,
+            currentAmount: typeof g?.currentAmount === "number" ? g.currentAmount : Number(g?.currentAmount) || 0,
+            icon: g?.icon || "PiggyBank",
+            color: g?.color || C.gold,
+            deadline: g?.deadline || "",
+            status: g?.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("Error reading savings goals from localStorage", e);
+    }
+    return [];
+  });
+
+  const [budget, setBudget] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_budget");
+      if (saved !== null) {
+        const num = Number(saved);
+        if (!isNaN(num) && num >= 0) {
+          if (num === 1000000 || num === 1000 || num === 820) return 0;
+          return num;
+        }
+      }
+    } catch (e) {
+      console.error("Error reading budget from localStorage", e);
     }
     return 0;
-  };
+  });
 
-  const getInitialCategoryBudgets = (): Record<string, number> => {
-    if (initialCache?.categoryBudgets && Object.keys(initialCache.categoryBudgets).length > 0) {
-      return initialCache.categoryBudgets;
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_recurring_expenses");
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Error reading recurring expenses from localStorage", error);
+      return [];
     }
-    const legacy = localStorage.getItem("wealthy_v2_category_budgets");
-    if (legacy) {
-      try {
-        const parsed = JSON.parse(legacy);
-        if (parsed && typeof parsed === "object") return parsed;
-      } catch {}
+  });
+  const [handledOccurrenceIds, setHandledOccurrenceIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_recurring_occurrences");
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Error reading recurring occurrences from localStorage", error);
+      return [];
     }
-    return {};
-  };
+  });
+  const walletCloudIdsRef = useRef(new Map<number, string>());
+  const pendingWalletCreatesRef = useRef(new Map<number, Promise<string>>());
+  const transactionCloudIdsRef = useRef(new Map<number, string>());
+  const savingsGoalCloudIdsRef = useRef(new Map<number, string>());
+  const budgetCloudIdRef = useRef<string | null>(null);
+  const [cloudLoadError, setCloudLoadError] = useState("");
+  const [cloudLoadStatus, setCloudLoadStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const [cloudReloadAttempt, setCloudReloadAttempt] = useState(0);
+  const isCurrentUserReady = cloudLoadStatus === "ready" && loadedUserId === user?.id;
 
-  // React States
-  const [transactions, setTransactions] = useState<Transaction[]>(
-    initialCache?.transactions?.length ? initialCache.transactions : initialTransactions
-  );
-  const [wallets, setWallets] = useState<Wallet[]>(
-    initialCache?.wallets?.length ? initialCache.wallets : initialWallets
-  );
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(
-    initialCache?.savingsGoals || []
-  );
-  const [budget, setBudget] = useState<number>(getInitialBudget);
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(getInitialCategoryBudgets);
-
-  // Bootstrap API Fetcher for useSyncData
-  const fetchBootstrapData = useCallback(async (): Promise<AppCacheData | null> => {
-    if (!session?.access_token) return null;
-
-    const res = await fetch(`${BACKEND_URL}/api/sync/bootstrap`, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
+  useEffect(() => {
+    if (!user) return;
+    void supabase.from("tracker_profiles").upsert({
+      id: user.id,
+      preferred_language: i18n.language?.startsWith("vi") ? "vi" : "en",
+      preferred_currency: currency,
+    }).then(({ error }) => {
+      if (error) console.error("Unable to persist user preferences", error);
     });
-
-    if (!res.ok) {
-      throw new Error(`Failed to fetch bootstrap data (${res.status})`);
-    }
-
-    const bootstrapData = await res.json();
-
-    const cloudWallets: Wallet[] = Array.isArray(bootstrapData.wallets) && bootstrapData.wallets.length > 0
-      ? bootstrapData.wallets.map((w: any) => ({
-          id: w.id,
-          label: w.name || w.label || "Ví chính",
-          balance: typeof w.balance === "number" ? w.balance : 0,
-          accent: C.gold,
-        }))
-      : wallets;
-
-    const cloudTxs: Transaction[] = Array.isArray(bootstrapData.transactions)
-      ? bootstrapData.transactions.map((t: any) => ({
-          id: t.id,
-          name: t.name || t.category || "Giao dịch",
-          date: t.date || new Date().toISOString(),
-          amount: typeof t.amount === "number" ? t.amount : 0,
-          category: t.category || "General",
-          walletId: t.wallet?.id || 1,
-        }))
-      : transactions;
-
-    const cloudGoals: SavingsGoal[] = Array.isArray(bootstrapData.savingsGoals)
-      ? bootstrapData.savingsGoals.map((g: any) => ({
-          id: g.id,
-          title: g.title,
-          targetAmount: Number(g.targetAmount) || 0,
-          currentAmount: Number(g.currentAmount) || 0,
-          icon: g.icon || "PiggyBank",
-          color: g.color || C.gold,
-          deadline: g.deadline || "",
-          status: g.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
-        }))
-      : savingsGoals;
-
-    let totalB = getInitialBudget();
-    let catBMap = getInitialCategoryBudgets();
-
-    if (Array.isArray(bootstrapData.budgets) && bootstrapData.budgets.length > 0) {
-      let cloudTotal = 0;
-      const cloudCatMap: Record<string, number> = {};
-      bootstrapData.budgets.forEach((b: any) => {
-        if (b.category === "TOTAL") {
-          cloudTotal = Number(b.amount) || 0;
-        } else {
-          cloudCatMap[b.category] = Number(b.amount) || 0;
-        }
-      });
-      if (cloudTotal > 0) totalB = cloudTotal;
-      if (Object.keys(cloudCatMap).length > 0) catBMap = cloudCatMap;
-    }
-
-    return {
-      wallets: cloudWallets,
-      transactions: cloudTxs,
-      savingsGoals: cloudGoals,
-      budget: totalB,
-      categoryBudgets: catBMap,
-    };
-  }, [session?.access_token]);
-
-  // Use Generic SWR Custom Hook with Cross-Device revalidateOnFocus
-  const { data: syncData, isLoading, mutate: revalidateApp } = useSyncData<AppCacheData | null>(
-    "wealthy_offline_cache",
-    fetchBootstrapData,
-    {
-      fallbackData: {
-        wallets: initialCache?.wallets?.length ? initialCache.wallets : initialWallets,
-        transactions: initialCache?.transactions?.length ? initialCache.transactions : initialTransactions,
-        savingsGoals: initialCache?.savingsGoals || [],
-        budget: getInitialBudget(),
-        categoryBudgets: getInitialCategoryBudgets(),
-      },
-      revalidateOnFocus: true,
-    }
-  );
-
-  // Trigger initial fetch when session becomes available to fix empty state bugs
-  useEffect(() => {
-    if (session?.access_token) {
-      revalidateApp();
-    }
-  }, [session?.access_token, revalidateApp]);
-
-  // Sync SWR Data to local Component States when data revalidates
-  useEffect(() => {
-    if (syncData) {
-      if (syncData.wallets?.length) {
-        setWallets(syncData.wallets);
-      }
-      if (syncData.transactions) {
-        setTransactions(syncData.transactions);
-      }
-      if (syncData.savingsGoals) {
-        setSavingsGoals(syncData.savingsGoals);
-      }
-      if (typeof syncData.budget === "number" && syncData.budget > 0) {
-        setBudget(syncData.budget);
-      }
-      if (syncData.categoryBudgets && Object.keys(syncData.categoryBudgets).length > 0) {
-        setCategoryBudgets(syncData.categoryBudgets);
-      }
-    }
-  }, [syncData]);
+  }, [currency, i18n.language, user]);
+  const handledOccurrenceIdsRef = useRef(new Set(handledOccurrenceIds));
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Soft-delete with undo: tracks transaction IDs pending permanent deletion
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set());
-  const pendingDeleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
-
   // Modal Visibility States
-  const [txDialog, setTxDialog] = useState<TransactionDialog>(null);
-  const [walletDialog, setWalletDialog] = useState<WalletDialog>(null);
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [isEditTxModalOpen, setIsEditTxModalOpen] = useState(false);
+  const [selectedTxToEdit, setSelectedTxToEdit] = useState<Transaction | null>(null);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isEditWalletModalOpen, setIsEditWalletModalOpen] = useState(false);
+  const [selectedWalletToEdit, setSelectedWalletToEdit] = useState<Wallet | null>(null);
   const [isAddGoalModalOpen, setIsAddGoalModalOpen] = useState(false);
   const [selectedGoalToAction, setSelectedGoalToAction] = useState<SavingsGoal | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
 
   // Track transaction IDs applied to wallet balances
-  const [appliedTxIds, setAppliedTxIds] = useState<number[]>([]);
+  const [appliedTxIds, setAppliedTxIds] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_applied_tx_ids");
+      if (saved) return JSON.parse(saved);
+      const existingSavedTxs = localStorage.getItem("wealthy_v2_transactions");
+      if (existingSavedTxs) {
+        const parsed: Transaction[] = JSON.parse(existingSavedTxs);
+        if (Array.isArray(parsed)) {
+          // Non-SplitBill transactions like "cơm" were already applied to wallet balance
+          return parsed.filter((t) => !t.name.startsWith("Chia bill")).map((t) => t.id);
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
+    localStorage.setItem("wealthy_v2_transactions", JSON.stringify(transactions));
+  }, [isCurrentUserReady, transactions]);
+
+  useEffect(() => {
+    if (!isCurrentUserReady) return;
+    localStorage.setItem("wealthy_v2_wallets", JSON.stringify(wallets));
+  }, [isCurrentUserReady, wallets]);
+
+  useEffect(() => {
+    if (!isCurrentUserReady) return;
+    localStorage.setItem("wealthy_v2_savings_goals", JSON.stringify(savingsGoals));
+  }, [isCurrentUserReady, savingsGoals]);
+
+  useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_budget", budget.toString());
-  }, [budget]);
+  }, [budget, isCurrentUserReady]);
 
   useEffect(() => {
-    localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(categoryBudgets));
-  }, [categoryBudgets]);
-
-  useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_applied_tx_ids", JSON.stringify(appliedTxIds));
-  }, [appliedTxIds]);
+  }, [appliedTxIds, isCurrentUserReady]);
+
+  useEffect(() => {
+    localStorage.setItem("wealthy_v2_recurring_expenses", JSON.stringify(recurringExpenses));
+  }, [recurringExpenses]);
+
+  useEffect(() => {
+    localStorage.setItem("wealthy_v2_recurring_occurrences", JSON.stringify(handledOccurrenceIds));
+  }, [handledOccurrenceIds]);
 
   // Reconcile unapplied transactions (e.g. Split Bill transactions) to active wallet balance
   useEffect(() => {
@@ -905,135 +2720,221 @@ export default function App() {
   }, [wallets, transactions, appliedTxIds]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeTab]);
 
-  // Cleanup pending-delete timers on unmount
   useEffect(() => {
+    let cancelled = false;
+    const emptyData = emptyCloudFinance();
+
+    setCloudLoadStatus("loading");
+    setLoadedUserId(null);
+    setCloudLoadError("");
+    walletCloudIdsRef.current = emptyData.walletCloudIds;
+    transactionCloudIdsRef.current = emptyData.transactionCloudIds;
+    savingsGoalCloudIdsRef.current = emptyData.savingsGoalCloudIds;
+    budgetCloudIdRef.current = emptyData.budgetCloudId;
+    setWallets(emptyData.wallets);
+    setTransactions(emptyData.transactions);
+    setSavingsGoals(emptyData.savingsGoals);
+    setBudget(emptyData.budget);
+    setAppliedTxIds([]);
+
+    void loadCloudFinance()
+      .then((cloudData) => {
+        if (cancelled) return;
+        applyCloudFinance(cloudData);
+        setCloudLoadError("");
+        setLoadedUserId(user?.id ?? null);
+        setCloudLoadStatus("ready");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("Unable to load cloud finance data", error);
+          setCloudLoadError(i18n.language?.startsWith("vi") ? "Không thể tải dữ liệu đã đồng bộ. Hãy thử lại." : "Cloud data could not be loaded. Please try again.");
+          setCloudLoadStatus("error");
+        }
+      });
+
     return () => {
-      pendingDeleteTimers.current.forEach((timer) => clearTimeout(timer));
+      cancelled = true;
     };
-  }, []);
+  // Changing the display language must not reload the financial workspace.
+  // The previous dependency caused a second cloud bootstrap after AuthProvider
+  // restored the user's language, which looked like an automatic page refresh.
+  }, [user?.id, cloudReloadAttempt]);
 
   // Handle username edit
   const handleEditName = () => {
     setIsProfileModalOpen(true);
   };
 
-  const handleSaveSettings = (key: string) => {
-    localStorage.setItem("gemini_api_key", key);
-    setGeminiApiKey(key);
-    setIsSettingsModalOpen(false);
+  const reportCloudSaveError = (error: unknown) => {
+    console.error("Unable to save cloud finance data", error);
+    setCloudLoadError(i18n.language?.startsWith("vi") ? "Không thể lưu dữ liệu lên cloud. Hãy thử lại." : "Cloud data could not be saved. Please try again.");
+  };
+
+  const applyCloudFinance = (cloudData: Awaited<ReturnType<typeof loadCloudFinance>>) => {
+    walletCloudIdsRef.current = cloudData.walletCloudIds;
+    transactionCloudIdsRef.current = cloudData.transactionCloudIds;
+    savingsGoalCloudIdsRef.current = cloudData.savingsGoalCloudIds;
+    budgetCloudIdRef.current = cloudData.budgetCloudId;
+    setWallets(cloudData.wallets);
+    setTransactions(cloudData.transactions);
+    setSavingsGoals(cloudData.savingsGoals);
+    setBudget(cloudData.budget);
+    setAppliedTxIds(cloudData.transactions.map((transaction) => transaction.id));
+  };
+
+  const refreshCloudFinance = async () => {
+    const cloudData = await loadCloudFinance();
+    applyCloudFinance(cloudData);
+    setCloudLoadError("");
   };
 
   // Handle addition of a transaction
-  const handleAddTransaction = (newTx: Omit<Transaction, "id">, walletId?: number) => {
+  const handleAddTransaction = async (newTx: Omit<Transaction, "id">, walletId?: number) => {
     const validWallet = wallets.find((w) => w.id === (walletId || newTx.walletId)) || wallets[0];
     const targetWalletId = validWallet ? validWallet.id : (walletId || newTx.walletId || 1);
 
-    const nextId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
-    const tx: Transaction = { ...newTx, walletId: targetWalletId, id: nextId };
-
-    setTransactions((prev) => [tx, ...prev]);
-    setAppliedTxIds((prev) => [...prev, nextId]);
-
-    // Adjust the wallet balance
-    setWallets((prev) => {
-      if (prev.length === 0) {
-        return [{ id: 1, label: "Main Wallet", balance: newTx.amount, accent: C.purple }];
+    try {
+      const walletToUse = validWallet ?? { id: targetWalletId, label: "Main Wallet", balance: 0, accent: C.purple };
+      let walletCloudId = walletCloudIdsRef.current.get(targetWalletId);
+      if (!walletCloudId) {
+        const pendingCreate = pendingWalletCreatesRef.current.get(targetWalletId);
+        walletCloudId = pendingCreate
+          ? await pendingCreate
+          : await createCloudWallet(walletToUse);
+        walletCloudIdsRef.current.set(targetWalletId, walletCloudId);
       }
-      return prev.map((w) =>
-        w.id === targetWalletId ? { ...w, balance: w.balance + newTx.amount } : w
-      );
-    });
-
-    setTxDialog(null);
+      await createCloudTransaction({ ...newTx, walletId: targetWalletId, id: 0 }, walletCloudId);
+      await refreshCloudFinance();
+      setIsTxModalOpen(false);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  // Handle deletion of a transaction (soft-delete with 5s undo window)
-  const handleDeleteTransaction = (txId: number) => {
+  const handleAddRecurringExpense = (expense: Omit<RecurringExpense, "id">) => {
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `recurring-${Date.now()}`;
+    setRecurringExpenses((current) => [...current, { ...expense, id }]);
+  };
+
+  const handleToggleRecurringExpense = (id: string) => {
+    setRecurringExpenses((current) => current.map((expense) => expense.id === id ? { ...expense, status: expense.status === "active" ? "paused" : "active" } : expense));
+  };
+
+  const handleDeleteRecurringExpense = (id: string) => {
+    setRecurringExpenses((current) => current.filter((expense) => expense.id !== id));
+  };
+
+  const handleConfirmRecurring = (occurrenceId: string) => {
+    if (handledOccurrenceIdsRef.current.has(occurrenceId)) return;
+    const expense = recurringExpenses.find((item) => `${item.id}:${item.nextDueDate}` === occurrenceId);
+    if (!expense) return;
+
+    handledOccurrenceIdsRef.current.add(occurrenceId);
+    setHandledOccurrenceIds((current) => current.includes(occurrenceId) ? current : [...current, occurrenceId]);
+    void handleAddTransaction({
+      name: expense.name,
+      amount: -Math.abs(expense.expectedAmount),
+      date: expense.nextDueDate,
+      category: expense.category,
+      walletId: expense.walletId,
+    }, expense.walletId);
+    setRecurringExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, nextDueDate: advanceMonthlyDueDate(item.nextDueDate, item.dayOfMonth) } : item));
+  };
+
+  // Handle deletion of a transaction (reverses wallet balance)
+  const handleDeleteTransaction = async (txId: number) => {
     const tx = transactions.find((t) => t.id === txId);
     if (!tx) return;
-    if (pendingDeleteIds.has(txId)) return;
-
-    // Immediately hide from UI
-    setPendingDeleteIds((prev) => new Set(prev).add(txId));
-
-    // Show toast with Undo action
-    toast(t("common.transactionDeleted", "Đã xóa giao dịch"), {
-      description: tx.name,
-      action: {
-        label: t("common.undo", "Hoàn tác"),
-        onClick: () => {
-          const timer = pendingDeleteTimers.current.get(txId);
-          if (timer) {
-            clearTimeout(timer);
-            pendingDeleteTimers.current.delete(txId);
-          }
-          setPendingDeleteIds((prev) => {
-            const next = new Set(prev);
-            next.delete(txId);
-            return next;
-          });
-        },
-      },
-      duration: 5000,
-    });
-
-    // Schedule actual permanent deletion after 5 seconds
-    const timer = setTimeout(() => {
-      setTransactions((prev) => prev.filter((t) => t.id !== txId));
-      setWallets((prev) =>
-        prev.map((w) =>
-          (w.id === tx.walletId || (prev.length === 1))
-            ? { ...w, balance: w.balance - tx.amount }
-            : w
-        )
-      );
-      setPendingDeleteIds((prev) => {
-        const next = new Set(prev);
-        next.delete(txId);
-        return next;
-      });
-      pendingDeleteTimers.current.delete(txId);
-    }, 5000);
-
-    pendingDeleteTimers.current.set(txId, timer);
+    const transactionCloudId = transactionCloudIdsRef.current.get(txId);
+    if (!transactionCloudId) return reportCloudSaveError(new Error("Transaction is not synchronized."));
+    try {
+      await deleteCloudTransaction(transactionCloudId);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   const handleEditTxClick = (tx: Transaction) => {
-    setTxDialog({ mode: "edit", tx });
+    setSelectedTxToEdit(tx);
+    setIsEditTxModalOpen(true);
   };
 
-  const handleSaveTxEdit = (updatedTx: Transaction) => {
+  const handleSaveTxEdit = async (updatedTx: Transaction) => {
     const oldTx = transactions.find((t) => t.id === updatedTx.id);
     if (!oldTx) return;
+    const transactionCloudId = transactionCloudIdsRef.current.get(updatedTx.id);
+    const walletCloudId = walletCloudIdsRef.current.get(updatedTx.walletId);
+    if (!transactionCloudId || !walletCloudId) return reportCloudSaveError(new Error("Transaction is not synchronized."));
+    try {
+      await updateCloudTransaction(transactionCloudId, updatedTx, walletCloudId);
+      await refreshCloudFinance();
+      setIsEditTxModalOpen(false);
+      setSelectedTxToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
+  };
 
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === updatedTx.id ? updatedTx : t))
-    );
+  // Handle addition of a wallet
+  const handleAddWallet = async (newWallet: Omit<Wallet, "id">) => {
+    const nextId = Math.max(0, ...wallets.map((w) => w.id)) + 1;
+    const wallet: Wallet = { ...newWallet, id: nextId };
+    try {
+      const createPromise = createCloudWallet(wallet);
+      pendingWalletCreatesRef.current.set(wallet.id, createPromise);
+      const cloudId = await createPromise;
+      walletCloudIdsRef.current.set(wallet.id, cloudId);
+      pendingWalletCreatesRef.current.delete(wallet.id);
+      await refreshCloudFinance();
+      setIsWalletModalOpen(false);
+    } catch (error) {
+      pendingWalletCreatesRef.current.delete(wallet.id);
+      reportCloudSaveError(error);
+    }
+  };
 
-    setWallets((prev) => {
-      if (prev.length === 0) return prev;
-      return prev.map((w) => {
-        let newBal = w.balance;
-        // Revert old tx amount from old wallet
-        if (w.id === oldTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
-          newBal -= oldTx.amount;
-        }
-        // Add updated tx amount to updated wallet
-        if (w.id === updatedTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
-          newBal += updatedTx.amount;
-        }
-        return { ...w, balance: newBal };
-      });
-    });
+  // Handle wallet edits, saves, and deletes
+  const handleEditWalletClick = (wallet: Wallet) => {
+    setSelectedWalletToEdit(wallet);
+    setIsEditWalletModalOpen(true);
+  };
 
-    setTxDialog(null);
+  const handleSaveWallet = async (updatedWallet: Wallet) => {
+    const walletCloudId = walletCloudIdsRef.current.get(updatedWallet.id);
+    if (!walletCloudId) return reportCloudSaveError(new Error("Wallet is not synchronized."));
+    try {
+      await updateCloudWallet(walletCloudId, updatedWallet);
+      await refreshCloudFinance();
+      setIsEditWalletModalOpen(false);
+      setSelectedWalletToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
+  };
+
+  const handleDeleteWallet = async (walletId: number) => {
+    if (transactions.some((transaction) => transaction.walletId === walletId)) {
+      return reportCloudSaveError(new Error("Delete this wallet's transactions first."));
+    }
+    const walletCloudId = walletCloudIdsRef.current.get(walletId);
+    if (!walletCloudId) return reportCloudSaveError(new Error("Wallet is not synchronized."));
+    try {
+      await deleteCloudWallet(walletCloudId);
+      await refreshCloudFinance();
+      setIsEditWalletModalOpen(false);
+      setSelectedWalletToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   // Handle savings goals actions (add, deposit, withdraw, delete, confetti)
-  const handleAddGoal = (newGoal: Omit<SavingsGoal, "id" | "status">) => {
+  const handleAddGoal = async (newGoal: Omit<SavingsGoal, "id" | "status">) => {
     const nextId = Math.max(0, ...savingsGoals.map((g) => g.id)) + 1;
     const goal: SavingsGoal = {
       ...newGoal,
@@ -1041,52 +2942,57 @@ export default function App() {
       status: newGoal.currentAmount >= newGoal.targetAmount ? "COMPLETED" : "IN_PROGRESS",
     };
 
-    setSavingsGoals((prev) => [...prev, goal]);
-    setIsAddGoalModalOpen(false);
-
-    if (goal.status === "COMPLETED") {
-      triggerConfetti();
+    try {
+      const cloudId = await createCloudSavingsGoal(goal);
+      savingsGoalCloudIdsRef.current.set(goal.id, cloudId);
+      await refreshCloudFinance();
+      setIsAddGoalModalOpen(false);
+      if (goal.status === "COMPLETED") triggerConfetti();
+    } catch (error) {
+      reportCloudSaveError(error);
     }
   };
 
-  const handleDepositToGoal = (goalId: number, amount: number) => {
+  const handleDepositToGoal = async (goalId: number, amount: number) => {
     if (amount <= 0) return;
-    setSavingsGoals((prev) =>
-      prev.map((g) => {
-        if (g.id !== goalId) return g;
-        const newAmt = Math.round((g.currentAmount + amount) * 100) / 100;
-        const isNowCompleted = newAmt >= g.targetAmount;
-
-        if (isNowCompleted && g.status !== "COMPLETED") {
-          triggerConfetti();
-        }
-
-        return {
-          ...g,
-          currentAmount: newAmt,
-          status: isNowCompleted ? "COMPLETED" : "IN_PROGRESS",
-        };
-      })
-    );
+    const goal = savingsGoals.find((item) => item.id === goalId);
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!goal || !cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    const currentAmount = Math.round((goal.currentAmount + amount) * 100) / 100;
+    const updatedGoal = { ...goal, currentAmount, status: currentAmount >= goal.targetAmount ? "COMPLETED" as const : "IN_PROGRESS" as const };
+    try {
+      await updateCloudSavingsGoal(cloudId, updatedGoal);
+      await refreshCloudFinance();
+      if (updatedGoal.status === "COMPLETED" && goal.status !== "COMPLETED") triggerConfetti();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleWithdrawFromGoal = (goalId: number, amount: number) => {
+  const handleWithdrawFromGoal = async (goalId: number, amount: number) => {
     if (amount <= 0) return;
-    setSavingsGoals((prev) =>
-      prev.map((g) => {
-        if (g.id !== goalId) return g;
-        const newAmt = Math.max(0, Math.round((g.currentAmount - amount) * 100) / 100);
-        return {
-          ...g,
-          currentAmount: newAmt,
-          status: newAmt >= g.targetAmount ? "COMPLETED" : "IN_PROGRESS",
-        };
-      })
-    );
+    const goal = savingsGoals.find((item) => item.id === goalId);
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!goal || !cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    const currentAmount = Math.max(0, Math.round((goal.currentAmount - amount) * 100) / 100);
+    const updatedGoal = { ...goal, currentAmount, status: currentAmount >= goal.targetAmount ? "COMPLETED" as const : "IN_PROGRESS" as const };
+    try {
+      await updateCloudSavingsGoal(cloudId, updatedGoal);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleDeleteGoal = (goalId: number) => {
-    setSavingsGoals((prev) => prev.filter((g) => g.id !== goalId));
+  const handleDeleteGoal = async (goalId: number) => {
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    try {
+      await deleteCloudSavingsGoal(cloudId);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   const triggerConfetti = () => {
@@ -1098,176 +3004,238 @@ export default function App() {
   };
 
   // Filter transactions by search query
-  const visibleTransactions = transactions.filter(
+  const filteredTransactions = transactions.filter(
     (t) =>
-      !pendingDeleteIds.has(t.id) &&
-      (t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category.toLowerCase().includes(searchQuery.toLowerCase()))
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const visibleAllTransactions = transactions.filter((t) => !pendingDeleteIds.has(t.id));
 
   const totalBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
   const activeSavingsSum = savingsGoals
     .filter((g) => g.status === "IN_PROGRESS")
     .reduce((sum, g) => sum + g.currentAmount, 0);
   const availableBalance = Math.max(0, totalBalance - activeSavingsSum);
+  const upcomingExpenses = getUpcomingOccurrences(recurringExpenses, new Date(), 14)
+    .filter((occurrence) => !handledOccurrenceIdsRef.current.has(occurrence.occurrenceId));
 
-  const screens = [
-    <Dashboard
+  if (!isCurrentUserReady) {
+    const isVietnamese = i18n.language?.startsWith("vi");
+    return (
+      <>
+        {cloudLoadStatus !== "error" ? <AppLoadingScreen label={isVietnamese ? "Đang đồng bộ không gian tài chính…" : "Syncing your financial workspace…"} /> : null}
+        <main className={cloudLoadStatus === "error" ? "grid min-h-screen place-items-center bg-[var(--paper-canvas)] px-6 text-center text-[var(--paper-ink)]" : "hidden"}>
+        <div className="max-w-sm rounded-3xl border border-[var(--paper-border)] bg-white p-6 shadow-[0_18px_50px_rgba(25,27,23,0.08)]">
+          <h1 className="text-lg font-bold">
+            {cloudLoadStatus === "error"
+              ? (isVietnamese ? "Chưa thể tải dữ liệu" : "Unable to load your data")
+              : (isVietnamese ? "Đang tải dữ liệu của bạn…" : "Loading your data…")}
+          </h1>
+          <p className="mt-2 text-sm font-medium text-[var(--paper-muted)]">
+            {cloudLoadStatus === "error"
+              ? cloudLoadError
+              : (isVietnamese ? "Đang đồng bộ không gian tài chính riêng của bạn." : "Syncing your private financial workspace.")}
+          </p>
+          {cloudLoadStatus === "error" ? (
+            <button
+              type="button"
+              onClick={() => setCloudReloadAttempt((attempt) => attempt + 1)}
+              className="mt-5 min-h-11 rounded-full bg-[var(--paper-action)] px-5 text-sm font-bold text-white"
+            >
+              {isVietnamese ? "Thử lại" : "Try again"}
+            </button>
+          ) : null}
+        </div>
+        </main>
+      </>
+    );
+  }
+
+  const screen = activeTab === "home" ? (
+    <PaperHomeScreen
       wallets={wallets}
-      transactions={visibleTransactions}
+      transactions={filteredTransactions}
       budget={budget}
-      onEditBudgetClick={() => setIsBudgetModalOpen(true)}
-      onAddTransactionClick={() => setTxDialog({ mode: "add" })}
-      onAddWalletClick={() => setWalletDialog({ mode: "add" })}
-      userName={userName}
-      onEditName={handleEditName}
-      onEditWalletClick={(wallet) => setWalletDialog({ mode: "edit", wallet })}
+      onEditBudget={() => setIsBudgetModalOpen(true)}
+      onAddTransaction={() => setIsTxModalOpen(true)}
+      onScanReceipt={() => setActiveTab("split-bill")}
+      onAddWallet={() => setIsWalletModalOpen(true)}
+      onEditWallet={handleEditWalletClick}
       onDeleteTransaction={handleDeleteTransaction}
       onEditTransaction={handleEditTxClick}
-    />,
-    <StatisticsScreen
-      wallets={wallets}
-      transactions={visibleAllTransactions}
-      budget={budget}
-      savingsGoals={savingsGoals}
-      availableBalance={availableBalance}
-      totalBalance={totalBalance}
-      onAddGoalClick={() => setIsAddGoalModalOpen(true)}
-      onDeposit={handleDepositToGoal}
-      onWithdraw={handleWithdrawFromGoal}
-      onDeleteGoal={handleDeleteGoal}
-      onDeleteTransaction={handleDeleteTransaction}
-      onEditTransaction={handleEditTxClick}
-    />,
-    <SplitScreen userName={displayName} onAddTransaction={handleAddTransaction} />,
-  ];
+      upcomingExpenses={upcomingExpenses}
+      onConfirmRecurring={handleConfirmRecurring}
+      onConfigureRecurring={() => setActiveTab("settings")}
+    />
+  ) : activeTab === "statistics" ? (
+    <div className="min-h-[100dvh] bg-[var(--paper-canvas)] px-4 pb-32 pt-6 text-[var(--paper-ink)] md:px-8 md:pb-10">
+      <div className="mx-auto w-full max-w-[1440px]">
+        <StatisticsScreen
+          wallets={wallets}
+          transactions={transactions}
+          budget={budget}
+          savingsGoals={savingsGoals}
+          availableBalance={availableBalance}
+          totalBalance={totalBalance}
+          onAddGoalClick={() => setIsAddGoalModalOpen(true)}
+          onDeposit={handleDepositToGoal}
+          onWithdraw={handleWithdrawFromGoal}
+          onDeleteGoal={handleDeleteGoal}
+          onDeleteTransaction={handleDeleteTransaction}
+          onEditTransaction={handleEditTxClick}
+        />
+      </div>
+    </div>
+  ) : activeTab === "split-bill" ? (
+    <div className="min-h-[100dvh] bg-[var(--paper-canvas)] px-4 py-6 text-[var(--paper-ink)] md:px-8">
+      <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />
+    </div>
+  ) : (
+    <main className="mx-auto w-full max-w-3xl px-4 pb-28 pt-7 sm:px-6 md:px-8 md:pb-10">
+      <h1 className="text-[30px] font-extrabold tracking-[-0.04em] text-[var(--paper-ink)]">{t("menu.settings")}</h1>
+      <p className="mt-2 text-sm font-medium text-[var(--paper-muted)]">
+        {i18n.language?.startsWith("vi") ? "Tùy chỉnh trải nghiệm và kết nối của bạn." : "Customize your experience and connections."}
+      </p>
+      <div className="paper-surface mt-6 grid gap-5 rounded-[24px] p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--paper-border)] pb-5">
+          <div>
+            <h2 className="text-base font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Ngôn ngữ & tiền tệ" : "Language & currency"}</h2>
+            <p className="mt-1 text-xs font-medium text-[var(--paper-muted)]">{i18n.language?.startsWith("vi") ? "Cách số tiền và nội dung được hiển thị." : "How amounts and content are displayed."}</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-2xl bg-[var(--paper-action)] p-2"><CurrencyToggle /><LanguageToggle /></div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Hồ sơ & tích hợp" : "Profile & integrations"}</h2>
+            <p className="mt-1 text-xs font-medium text-[var(--paper-muted)]">{userName || (i18n.language?.startsWith("vi") ? "Chưa đặt tên" : "No name set")}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleEditName} className="min-h-11 rounded-full border border-[var(--paper-border)] px-4 text-xs font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Sửa hồ sơ" : "Edit profile"}</button>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5">
+        <RecurringExpensesSettings
+          expenses={recurringExpenses}
+          wallets={wallets}
+          locale={i18n.language?.startsWith("vi") ? "vi-VN" : "en-US"}
+          formatCurrency={formatCurrency}
+          onAdd={handleAddRecurringExpense}
+          onToggle={handleToggleRecurringExpense}
+          onDelete={handleDeleteRecurringExpense}
+        />
+      </div>
+    </main>
+  );
 
   return (
     <>
-      <style>{`
-        :root { color-scheme: dark; }
-        body { background: #080809; margin: 0; }
-        .hide-scroll { scrollbar-width: none; }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        /* Smooth scrolling for main area */
-        .desktop-content { scroll-behavior: smooth; }
-      `}</style>
-
-      <div className="flex h-[100dvh] w-full bg-[#0A0A0A] text-white overflow-hidden relative">
-        {/* Desktop Sidebar */}
-        <Sidebar active={activeTab} onChange={setActiveTab} userName={displayName} onEditName={handleEditName} />
-
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col h-full md:pl-64 overflow-y-auto w-full pb-20 md:pb-0 hide-scroll">
-          {/* Header */}
-          <header
-            className="sticky top-0 z-40 w-full px-4 md:px-8 py-3.5 md:py-5 flex items-center justify-between border-b border-white/10 transition-all duration-300"
-            style={{
-              background: "rgba(18, 18, 18, 0.85)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-            }}
+      {cloudLoadError ? (
+        <div className="fixed inset-x-4 top-4 z-[70] mx-auto max-w-xl rounded-2xl border border-[#b42318]/20 bg-white px-4 py-3 text-sm font-medium text-[#8b1e16] shadow-lg">
+          {cloudLoadError}
+        </div>
+      ) : null}
+      <AppShell
+        active={activeTab}
+        onNavigate={setActiveTab}
+        onAddTransaction={() => setIsTxModalOpen(true)}
+        onScanReceipt={() => setActiveTab("split-bill")}
+        labels={{
+          home: t("menu.home"),
+          statistics: t("menu.stats"),
+          splitBill: t("menu.split"),
+          settings: t("menu.settings"),
+          actions: i18n.language?.startsWith("vi") ? "Tác vụ nhanh" : "Quick actions",
+          addTransaction: t("dashboard.newTransaction"),
+          scanReceipt: i18n.language?.startsWith("vi") ? "Quét hóa đơn" : "Scan receipt",
+          close: t("common.close"),
+        }}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <div>
-                <div className="hidden sm:flex items-center gap-2 mb-0.5">
-                  <span className="text-[11px] md:text-[15px] hidden md:inline" style={{ color: C.tm }}>
-                    • {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                <h2
-                  className="text-base md:text-2xl font-bold cursor-pointer hover:text-gold transition-colors flex items-center gap-1.5 truncate text-white"
-                  onClick={handleEditName}
+            {screen}
+          </motion.div>
+        </AnimatePresence>
+      </AppShell>
+
+      {/* Add Transaction Drawer (Vaul iOS-style Bottom Sheet) */}
+      <Drawer.Root open={isTxModalOpen} onOpenChange={setIsTxModalOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
+          <Drawer.Content className="paper-ledger fixed bottom-0 left-0 right-0 z-50 flex max-h-[90vh] flex-col rounded-t-[32px] border-t font-sans text-[var(--paper-ink)] outline-none" style={{ background: C.card, borderColor: C.border, color: "var(--paper-ink)" }}>
+            {/* Drag Handle */}
+            <div className="mx-auto my-3 h-1.5 w-12 rounded-full bg-[var(--paper-border)]" />
+
+            {/* Content Container */}
+            <div className="p-6 overflow-y-auto">
+              <div className="flex items-center justify-between mb-5">
+                <Drawer.Title className="text-[18px] font-bold text-[var(--paper-ink)]">
+                  {t("dashboard.newTransaction")}
+                </Drawer.Title>
+                <Drawer.Description className="sr-only">Add a new expense or income transaction</Drawer.Description>
+                <button
+                  onClick={() => setIsTxModalOpen(false)}
+                  className="cursor-pointer rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                 >
-                  <span className="truncate">{t("dashboard.welcome")}, {displayName}</span> 👋
-                </h2>
+                  {t("common.close")}
+                </button>
               </div>
+              <AddTransactionForm wallets={wallets} onAdd={handleAddTransaction} />
             </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
 
-            <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-              {/* Search input - hidden on mobile, shown on desktop */}
-              <div className="hidden md:block relative group">
-                <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-gold"
-                  size={16}
-                  color={C.tm}
-                />
-                <input
-                  type="text"
-                  placeholder={t("dashboard.searchPlaceholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-11 pr-4 py-2.5 rounded-2xl w-56 lg:w-64 text-sm transition-all duration-300 focus:w-72 outline-none border font-sans"
-                  style={{
-                    background: C.card,
-                    borderColor: C.border,
-                    color: C.white,
-                  }}
-                />
-              </div>
+      {/* Edit Transaction Modal */}
+      <Modal
+        isOpen={isEditTxModalOpen}
+        onClose={() => {
+          setIsEditTxModalOpen(false);
+          setSelectedTxToEdit(null);
+        }}
+        title={t("dashboard.editTransaction")}
+      >
+        {selectedTxToEdit && (
+          <EditTransactionForm
+            transaction={selectedTxToEdit}
+            wallets={wallets}
+            onSave={handleSaveTxEdit}
+            onDelete={(id) => {
+              handleDeleteTransaction(id);
+              setIsEditTxModalOpen(false);
+              setSelectedTxToEdit(null);
+            }}
+          />
+        )}
+      </Modal>
 
-              {/* New Transaction Button */}
-              <motion.button
-                className="px-3 md:px-4 py-2 md:py-2.5 rounded-xl md:rounded-2xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg transition-all"
-                style={{
-                  background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldL} 100%)`,
-                  color: C.bg,
-                  boxShadow: `0 4px 16px ${C.gold}33`,
-                }}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ duration: 0.15 }}
-                onClick={() => setTxDialog({ mode: "add" })}
-                title={t("dashboard.newTransaction")}
-              >
-                <Plus size={16} strokeWidth={2.5} />
-                <span className="hidden sm:inline">{t("dashboard.newTransaction")}</span>
-              </motion.button>
+      {/* Add Wallet Modal */}
+      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)} title={t("dashboard.activeWallets")}>
+        <AddWalletForm onAdd={handleAddWallet} />
+      </Modal>
 
-              {/* Currency & Language Toggles */}
-              <CurrencyToggle />
-              <LanguageToggle />
-            </div>
-          </header>
-
-          {/* Screen Content */}
-          <div className="flex-1 px-4 md:px-8 py-4 md:py-6 max-w-[1400px] w-full mx-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {screens[activeTab]}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
-
-        {/* Mobile Bottom Navigation */}
-        <BottomNav active={activeTab} onChange={setActiveTab} />
-      </div>
-
-      {/* Transaction Manager (Add Drawer + Edit Modal) */}
-      <TransactionManager
-        wallets={wallets}
-        dialog={txDialog}
-        onDialogClose={() => setTxDialog(null)}
-        onAddTransaction={handleAddTransaction}
-        onSaveTxEdit={handleSaveTxEdit}
-        onDeleteTransaction={handleDeleteTransaction}
-      />
-
-      {/* Wallet Manager (Add/Edit/Delete Wallet modals) */}
-      <WalletManager
-        wallets={wallets}
-        setWallets={setWallets}
-        dialog={walletDialog}
-        onDialogClose={() => setWalletDialog(null)}
-      />
+      {/* Edit Wallet Modal */}
+      <Modal
+        isOpen={isEditWalletModalOpen}
+        onClose={() => {
+          setIsEditWalletModalOpen(false);
+          setSelectedWalletToEdit(null);
+        }}
+        title={`Edit Wallet: ${selectedWalletToEdit?.label}`}
+      >
+        {selectedWalletToEdit && (
+          <EditWalletForm
+            wallet={selectedWalletToEdit}
+            onSave={handleSaveWallet}
+            onDelete={wallets.length > 1 ? handleDeleteWallet : undefined}
+          />
+        )}
+      </Modal>
 
       {/* Add Savings Goal Modal */}
       <Modal isOpen={isAddGoalModalOpen} onClose={() => setIsAddGoalModalOpen(false)} title="Tạo hũ tiết kiệm">
@@ -1282,134 +3250,109 @@ export default function App() {
       {/* Edit Profile Modal */}
       <Modal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit Profile">
         <EditProfileForm
-          initialName={userName || authDisplayName}
+          initialName={userName}
           onSave={(newName) => {
             setUserName(newName);
             localStorage.setItem("wealthy_user_name", newName);
             setIsProfileModalOpen(false);
           }}
         />
-        {/* Signed-in account info + sign out */}
-        <div className="mt-5 pt-4 border-t" style={{ borderColor: C.border }}>
-          {user?.email && (
-            <p className="text-[11px] text-tm mb-3 flex items-center gap-1.5 font-sans truncate">
-              <Mail size={11} className="shrink-0" /> {user.email}
-            </p>
-          )}
-          <button
-            onClick={() => {
-              signOut();
-              localStorage.removeItem("wealthy_user_name");
-              setIsProfileModalOpen(false);
-            }}
-            className="w-full py-3 rounded-xl font-bold text-sm cursor-pointer transition-all bg-red-500/15 text-red hover:bg-red-500/25 border border-red-500/30"
-          >
-            {t("auth.logout", "Đăng xuất")}
-          </button>
-        </div>
       </Modal>
 
       {/* Edit Budget Modal */}
-      <BudgetManager
-        isOpen={isBudgetModalOpen}
-        onClose={() => setIsBudgetModalOpen(false)}
-        budget={budget}
-        categoryBudgets={categoryBudgets}
-        transactions={transactions}
-        onSave={async (newBudget, newCats) => {
-          if (!session?.access_token) {
-            throw new Error("Bạn chưa đăng nhập");
-          }
-
-          const currentMonthStr = new Date().toISOString().slice(0, 7);
-          const res = await fetch(`${BACKEND_URL}/api/budgets`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              periodMonth: currentMonthStr,
-              totalBudget: newBudget,
-              categoryBudgets: newCats,
-            }),
-          });
-
-          if (!res.ok) {
-            const errBody = await res.text().catch(() => "");
-            let errMsg = `Lưu ngân sách lên PostgreSQL thất bại (${res.status})`;
+      <Modal isOpen={isBudgetModalOpen} onClose={() => setIsBudgetModalOpen(false)} title="Edit Monthly Budget">
+        <EditBudgetForm
+          initialBudget={budget}
+          onSave={async (newBudget) => {
             try {
-              const parsed = JSON.parse(errBody);
-              if (parsed?.message) errMsg += `: ${parsed.message}`;
-            } catch (e) {
-              if (errBody) errMsg += `: ${errBody}`;
+              const savedBudget = await saveCloudBudget(newBudget);
+              budgetCloudIdRef.current = savedBudget.id;
+              await refreshCloudFinance();
+              setIsBudgetModalOpen(false);
+            } catch (error) {
+              reportCloudSaveError(error);
             }
-            console.error(`[Budget] REST API failed with status ${res.status}:`, errBody);
-            throw new Error(errMsg);
-          }
+          }}
+        />
+      </Modal>
 
-          const cloudBudgets = await res.json();
-          if (Array.isArray(cloudBudgets)) {
-            let totalB = 0;
-            const catBMap: Record<string, number> = {};
-            cloudBudgets.forEach((b: any) => {
-              if (b.category === "TOTAL") {
-                totalB = Number(b.amount) || 0;
-              } else {
-                catBMap[b.category] = Number(b.amount) || 0;
-              }
-            });
-            const finalTotal = totalB > 0 ? totalB : newBudget;
-            const finalCats = Object.keys(catBMap).length > 0 ? catBMap : newCats;
+      {/* Onboarding Overlay */}
+      <AnimatePresence>
+        {!userName && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#080809]">
+            {/* Ambient Background Glow */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+              <div
+                className="absolute top-[-20%] left-[-10%] w-[60%] aspect-square rounded-full filter blur-[120px]"
+                style={{ background: `radial-gradient(circle, ${C.gold} 0%, transparent 70%)` }}
+              />
+              <div
+                className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full filter blur-[120px]"
+                style={{ background: `radial-gradient(circle, ${C.purple} 0%, transparent 70%)` }}
+              />
+            </div>
 
-            setBudget(finalTotal);
-            setCategoryBudgets(finalCats);
+            <motion.div
+              className="paper-ledger paper-dialog relative w-full max-w-md p-8 rounded-3xl border shadow-2xl text-center"
+              style={{ background: C.card, borderColor: C.border }}
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            >
+              <div
+                className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-xl font-bold mb-6"
+                style={{
+                  background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldL} 100%)`,
+                  color: C.bg,
+                }}
+              >
+                W
+              </div>
 
-            // Update SWR cache and trigger revalidation
-            try {
-              const currentCache = getOfflineCache() || {};
-              const updatedCache = {
-                ...currentCache,
-                budget: finalTotal,
-                categoryBudgets: finalCats,
-              };
-              const cacheStr = JSON.stringify(updatedCache);
-              localStorage.setItem("wealthy_offline_cache", cacheStr);
-              localStorage.setItem("wealthy_v2_budget", finalTotal.toString());
-              localStorage.setItem("wealthy_v2_category_budgets", JSON.stringify(finalCats));
+              <h2 className="text-2xl font-bold text-white mb-2 font-sans tracking-tight">
+                Welcome to Wealthy
+              </h2>
+              <p className="text-sm text-tm mb-8">
+                Your luxury personal expense and portfolio assistant. Let's start by setting up your name.
+              </p>
 
-              window.dispatchEvent(new StorageEvent("storage", {
-                key: "wealthy_offline_cache",
-                newValue: cacheStr,
-              }));
-
-              revalidateApp();
-            } catch (e) {
-              console.error("[Cache] Failed to update budget cache:", e);
-            }
-          }
-        }}
-      />
-
-      {/* Toast Notifications (Undo delete, group saved, etc.) */}
-      <Toaster
-        position="top-center"
-        theme="dark"
-        toastOptions={{
-          style: {
-            background: C.card,
-            border: `1px solid ${C.border}`,
-            color: C.white,
-          },
-          actionButtonStyle: {
-            background: C.gold,
-            color: C.bg,
-            fontWeight: 700,
-          },
-        }}
-      />
-
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const target = e.target as HTMLFormElement;
+                  const nameInput = target.elements.namedItem("name") as HTMLInputElement;
+                  const val = nameInput.value.trim();
+                  if (val) {
+                    setUserName(val);
+                    localStorage.setItem("wealthy_user_name", val);
+                  }
+                }}
+                className="flex flex-col gap-4"
+              >
+                <div className="flex flex-col gap-2 text-left">
+                  <label className="text-xs text-tm font-medium uppercase tracking-wider pl-1">Your Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    autoFocus
+                    placeholder="Enter your name..."
+                    className="w-full px-5 py-3.5 rounded-2xl outline-none border text-white bg-surf font-semibold transition-all focus:border-gold"
+                    style={{ borderColor: C.border }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3.5 mt-2 rounded-2xl font-bold transition-all hover:brightness-110 cursor-pointer text-sm"
+                  style={{ background: C.gold, color: C.bg }}
+                >
+                  Get Started
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
-

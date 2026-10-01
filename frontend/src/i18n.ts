@@ -25,8 +25,10 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: "vi", // Set fallback to Vietnamese to ensure it defaults cleanly
-    debug: true,
+    // Never fall back to the other user-facing language. Missing keys are
+    // easier to spot than silently mixing English and Vietnamese in one view.
+    fallbackLng: false,
+    debug: import.meta.env.MODE === "development",
     interpolation: {
       escapeValue: false,
     },
