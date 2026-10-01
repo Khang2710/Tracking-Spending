@@ -58,8 +58,8 @@ Never prefix AI secrets with `VITE_`. Vite exposes every `VITE_*` value to the b
 ## Install
 
 ```bash
-npm --prefix backend install
-npm --prefix frontend install --legacy-peer-deps
+npm --prefix backend ci
+npm --prefix frontend ci
 ```
 
 ## Run locally
@@ -85,6 +85,22 @@ npm run check
 ```
 
 This runs both applications' typechecks, tests, and production builds.
+
+## Deploy
+
+The repository includes `render.yaml` for the backend and `vercel.json` for the frontend.
+
+For Render, create a Blueprint from this repository. Render will build the Node service from `backend/` and use `/api/health` as its health check. Enter the environment variables marked `sync: false` in the Render dashboard; never commit their values.
+
+For Vercel, import the repository from GitHub. Add these project environment variables:
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+```
+
+After Vercel assigns the production domain, set `FRONTEND_ORIGINS` on Render to that exact origin, for example `https://your-project.vercel.app`.
 
 ## Security model
 
