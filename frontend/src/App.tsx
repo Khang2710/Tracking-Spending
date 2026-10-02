@@ -33,7 +33,6 @@ import {
 import confetti from "canvas-confetti";
 import SplitScreen from "./features/split-bill/SplitScreen";
 import CashFlowCalendar from "./features/statistics/CashFlowCalendar";
-import { Drawer } from "vaul";
 import { useTranslation } from "react-i18next";
 import { supabase } from "./lib/supabase";
 import { HomeScreen as PaperHomeScreen } from "./features/home/HomeScreen";
@@ -60,7 +59,8 @@ import {
   updateCloudWallet,
 } from "./features/finance-data/finance.repository";
 import { emptyCloudFinance } from "./features/finance-data/cloudWorkspaceState";
-import { classifyTransactionCategory } from "./features/transactions/categoryClassifier";
+import { MobileFormSheet } from "./components/mobile/MobileFormSheet";
+import { NEW_TRANSACTION_FORM_ID, NewTransactionForm } from "./features/transactions/NewTransactionForm";
 
 export interface SavingsGoal {
   id: number;
@@ -1800,221 +1800,6 @@ function Modal({
   );
 }
 
-function useAutoCategory(title: string, hasManuallySelected: boolean) {
-  const isGuessing = false;
-  const [guessedCategory, setGuessedCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!title || title.trim().length < 2 || hasManuallySelected) {
-      setGuessedCategory(null);
-      return;
-    }
-
-    setGuessedCategory(classifyTransactionCategory(title));
-  }, [title, hasManuallySelected]);
-
-  return { isGuessing, guessedCategory };
-}
-
-function AddTransactionForm({
-  wallets,
-  onAdd,
-}: {
-  wallets: Wallet[];
-  onAdd: (tx: Omit<Transaction, "id">, walletId: number) => void;
-}) {
-  const { t } = useTranslation();
-  const { formatCurrency, currency } = useCurrency();
-
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState<"income" | "outcome">("outcome");
-  const [category, setCategory] = useState("Others");
-  const [walletId, setWalletId] = useState(wallets[0]?.id || 1);
-  const [date, setDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().split("T")[0];
-  });
-  const [hasManuallySelected, setHasManuallySelected] = useState(false);
-
-  const { isGuessing, guessedCategory } = useAutoCategory(name, hasManuallySelected);
-
-  const categories = [
-    "Food",
-    "Drinks",
-    "Groceries",
-    "Shopping",
-    "Fuel",
-    "Housing",
-    "Entertainment",
-    "Salary",
-    "Bank",
-    "Investment",
-    "Others",
-  ];
-
-  useEffect(() => {
-    if (guessedCategory && !hasManuallySelected) {
-      const matchedCat = categories.find(c => c.toLowerCase() === guessedCategory.toLowerCase()) || "Others";
-      setCategory(matchedCat);
-    }
-  }, [guessedCategory, hasManuallySelected]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !amount) return;
-    const numAmt = parseAmountInput(amount);
-    if (isNaN(numAmt) || numAmt <= 0) return;
-
-    const finalAmount = toStoredAmount(type === "outcome" ? -numAmt : numAmt, currency);
-    onAdd({
-      name,
-      amount: finalAmount,
-      category,
-      // Keep the native date input's ISO value. Postgres date columns and the
-      // transaction RPC expect YYYY-MM-DD; converting to DD-MM-YYYY makes
-      // previous-day transactions fail to save (or be parsed ambiguously).
-      date,
-      walletId,
-    }, walletId);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]" style={{ color: "var(--paper-ink)" }}>
-      <div className="flex gap-2 rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] p-1">
-        <button
-          type="button"
-          onClick={() => setType("outcome")}
-          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
-          style={{
-            background: type === "outcome" ? "var(--paper-ink)" : "transparent",
-            color: type === "outcome" ? "white" : "var(--paper-muted)",
-          }}
-        >
-          {t("stats.outcome")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setType("income")}
-          className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
-          style={{
-            background: type === "income" ? "var(--paper-sage-soft)" : "transparent",
-            color: type === "income" ? "var(--paper-ink)" : "var(--paper-muted)",
-          }}
-        >
-          {t("stats.income")}
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-[var(--paper-muted)]">
-          {t("dashboard.description")}
-        </label>
-        <input
-          type="text"
-          required
-          placeholder=""
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (e.target.value.trim() === "") {
-              setHasManuallySelected(false);
-            }
-          }}
-          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
-          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-[var(--paper-muted)]">
-            {t("dashboard.amount")}
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          min="0.01"
-          required
-          placeholder="0"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
-          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold text-[var(--paper-muted)]">
-            {t("dashboard.category")}
-          </label>
-          {isGuessing && (
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-[var(--paper-warning)] animate-pulse">
-              <Loader2 size={11} className="animate-spin text-[var(--paper-warning)]" />
-              <span>Gợi ý danh mục...</span>
-            </div>
-          )}
-        </div>
-        <select
-          value={category}
-          onChange={(e) => {
-            setHasManuallySelected(true);
-            setCategory(e.target.value);
-          }}
-          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
-          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
-        >
-          {categories.map((cat) => (
-            <option key={cat} value={cat} className="bg-sec">
-              {cat}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-[var(--paper-muted)]">
-          {t("dashboard.payWith")}
-        </label>
-        <select
-          value={walletId}
-          onChange={(e) => setWalletId(Number(e.target.value))}
-          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
-          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
-        >
-          {wallets.map((w) => (
-            <option key={w.id} value={w.id} className="bg-sec">
-              {w.label} ({formatCurrency(w.balance)})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-[var(--paper-muted)]">
-          {t("dashboard.date")}
-        </label>
-        <input
-          type="date"
-          required
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
-          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
-        />
-      </div>
-
-      <button
-        type="submit"
-        className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer"
-        style={{ background: "var(--paper-ink)", color: "white" }}
-      >
-        {t("dashboard.saveTransaction")}
-      </button>
-    </form>
-  );
-}
-
 function EditTransactionForm({
   transaction,
   wallets,
@@ -3164,33 +2949,23 @@ export default function App() {
         </AnimatePresence>
       </AppShell>
 
-      {/* Add Transaction Drawer (Vaul iOS-style Bottom Sheet) */}
-      <Drawer.Root open={isTxModalOpen} onOpenChange={setIsTxModalOpen}>
-        <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-          <Drawer.Content className="paper-ledger fixed bottom-0 left-0 right-0 z-50 flex max-h-[90vh] flex-col rounded-t-[32px] border-t font-sans text-[var(--paper-ink)] outline-none" style={{ background: C.card, borderColor: C.border, color: "var(--paper-ink)" }}>
-            {/* Drag Handle */}
-            <div className="mx-auto my-3 h-1.5 w-12 rounded-full bg-[var(--paper-border)]" />
-
-            {/* Content Container */}
-            <div className="p-6 overflow-y-auto">
-              <div className="flex items-center justify-between mb-5">
-                <Drawer.Title className="text-[18px] font-bold text-[var(--paper-ink)]">
-                  {t("dashboard.newTransaction")}
-                </Drawer.Title>
-                <Drawer.Description className="sr-only">Add a new expense or income transaction</Drawer.Description>
-                <button
-                  onClick={() => setIsTxModalOpen(false)}
-                  className="cursor-pointer rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
-                >
-                  {t("common.close")}
-                </button>
-              </div>
-              <AddTransactionForm wallets={wallets} onAdd={handleAddTransaction} />
-            </div>
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
+      <MobileFormSheet
+        open={isTxModalOpen}
+        onOpenChange={setIsTxModalOpen}
+        title={t("dashboard.newTransaction")}
+        description={i18n.language?.startsWith("vi") ? "Thêm khoản chi hoặc thu nhập" : "Add an expense or income transaction"}
+        footer={(
+          <button
+            type="submit"
+            form={NEW_TRANSACTION_FORM_ID}
+            className="w-full cursor-pointer rounded-xl bg-[var(--paper-ink)] py-3 font-bold text-white transition-all"
+          >
+            {t("dashboard.saveTransaction")}
+          </button>
+        )}
+      >
+        <NewTransactionForm wallets={wallets} onSubmit={handleAddTransaction} />
+      </MobileFormSheet>
 
       {/* Edit Transaction Modal */}
       <Modal
