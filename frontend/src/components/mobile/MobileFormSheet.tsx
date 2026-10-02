@@ -7,6 +7,8 @@ export type MobileFormSheetProps = {
   description: string;
   closeLabel: string;
   onOpenChange(open: boolean): void;
+  /** Persistent control to restore when the immediate opening action is removed. */
+  returnFocusTo?: HTMLElement | null;
   footer?: ReactNode;
   children: ReactNode;
 };
@@ -21,7 +23,7 @@ function getViewportGeometry(): { keyboardOffset: number; availableHeight: numbe
   };
 }
 
-export function MobileFormSheet({ open, title, description, closeLabel, onOpenChange, footer, children }: MobileFormSheetProps): ReactElement | null {
+export function MobileFormSheet({ open, title, description, closeLabel, onOpenChange, returnFocusTo, footer, children }: MobileFormSheetProps): ReactElement | null {
   const [{ keyboardOffset, availableHeight }, setViewportGeometry] = useState(getViewportGeometry);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
@@ -104,9 +106,10 @@ export function MobileFormSheet({ open, title, description, closeLabel, onOpenCh
           className="paper-ledger fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[100dvh] w-full max-w-lg flex-col rounded-t-[32px] border border-white/70 bg-white text-[var(--paper-ink)] shadow-[0_30px_80px_rgba(23,26,22,0.24)] outline-none"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
+            const openingControl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
             focusLifecycleRef.current = {
               content: event.target,
-              trigger: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+              trigger: returnFocusTo?.isConnected ? returnFocusTo : openingControl,
             };
             focusFrameRef.current = window.requestAnimationFrame(() => {
               focusFrameRef.current = null;

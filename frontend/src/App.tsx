@@ -2416,6 +2416,11 @@ export default function App() {
 
   // Modal Visibility States
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const transactionReturnFocusRef = useRef<HTMLElement | null>(null);
+  const openTransactionSheet = (returnFocusTo?: HTMLElement | null) => {
+    transactionReturnFocusRef.current = returnFocusTo ?? null;
+    setIsTxModalOpen(true);
+  };
   const [isEditTxModalOpen, setIsEditTxModalOpen] = useState(false);
   const [selectedTxToEdit, setSelectedTxToEdit] = useState<Transaction | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -2842,7 +2847,7 @@ export default function App() {
       transactions={filteredTransactions.map((transaction) => ({ ...transaction, note: transaction.note ?? null }))}
       budget={budget}
       onEditBudget={() => setIsBudgetModalOpen(true)}
-      onAddTransaction={() => setIsTxModalOpen(true)}
+      onAddTransaction={() => openTransactionSheet()}
       onScanReceipt={() => setActiveTab("split-bill")}
       onAddWallet={() => setIsWalletModalOpen(true)}
       onEditWallet={handleEditWalletClick}
@@ -2923,7 +2928,7 @@ export default function App() {
       <AppShell
         active={activeTab}
         onNavigate={setActiveTab}
-        onAddTransaction={() => setIsTxModalOpen(true)}
+        onAddTransaction={openTransactionSheet}
         onScanReceipt={() => setActiveTab("split-bill")}
         labels={{
           home: t("menu.home"),
@@ -2951,6 +2956,7 @@ export default function App() {
 
       <MobileFormSheet
         open={isTxModalOpen}
+        returnFocusTo={transactionReturnFocusRef.current}
         onOpenChange={setIsTxModalOpen}
         title={t("dashboard.newTransaction")}
         closeLabel={t("common.close")}

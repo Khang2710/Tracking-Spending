@@ -52,7 +52,8 @@ async function openMobileTransaction() {
   render(<I18nextProvider i18n={i18n}><CurrencyProvider><App /></CurrencyProvider></I18nextProvider>);
   const user = userEvent.setup();
   const mobileNavigation = await screen.findByRole("navigation", { name: "Điều hướng di động" });
-  await user.click(within(mobileNavigation).getByRole("button", { name: "Quick actions" }));
+  const launcher = within(mobileNavigation).getByRole("button", { name: "Quick actions" });
+  await user.click(launcher);
   await user.click(within(screen.getByRole("dialog", { name: "Quick actions" })).getByRole("button", { name: "New Transaction" }));
   const sheet = screen.getByRole("dialog", { name: "New Transaction" });
   await user.type(within(sheet).getByLabelText("Description"), "Taxi");
@@ -62,7 +63,7 @@ async function openMobileTransaction() {
   await user.type(within(sheet).getByLabelText("Transaction date"), "2026-10-02");
   await user.click(within(sheet).getByRole("button", { name: "Add note" }));
   await user.type(within(sheet).getByLabelText("Note"), "  Taxi home  ");
-  return { user, sheet };
+  return { user, sheet, launcher };
 }
 
 describe("mobile New Transaction App flow", () => {
@@ -75,6 +76,14 @@ describe("mobile New Transaction App flow", () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it("returns focus to Quick actions when the New Transaction sheet closes", async () => {
+    const { user, sheet, launcher } = await openMobileTransaction();
+    await user.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(launcher).toHaveFocus());
+    expect(sheet).not.toBeInTheDocument();
+    expect(createCloudTransaction).not.toHaveBeenCalled();
+  });
 
   it("sends the normalized note and closes only after creation and workspace refresh succeed", async () => {
     const creation = deferred<string>();
