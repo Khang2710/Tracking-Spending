@@ -33,14 +33,44 @@ describe("extractReceiptItems", () => {
 });
 
 describe("extractReceiptScan", () => {
-  it("returns purchased items and the separate service charge", () => {
-    expect(extractReceiptScan('{"items":[{"name":"Egust","price":35}],"serviceCharge":36}'))
-      .toEqual({ items: [{ name: "Egust", price: 35 }], serviceCharge: 36 });
+  const defaults = { tax: 0, serviceCharge: 0, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null };
+
+  it("returns purchased items and the complete receipt breakdown", () => {
+    expect(extractReceiptScan('{"items":[{"name":"Food","price":191}],"tax":7,"serviceCharge":36,"tip":0,"billDiscount":0,"otherFees":0,"receiptTotal":234}'))
+      .toEqual({ items: [{ name: "Food", price: 191 }], tax: 7, serviceCharge: 36, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: 234 });
   });
 
   it("normalizes service charge amounts in wrapped model JSON", () => {
     expect(extractReceiptScan('<think>reading</think>```json\n{"serviceCharge":"36.000","items":[{"name":"Tea","price":3}]}\n```'))
-      .toEqual({ items: [{ name: "Tea", price: 3 }], serviceCharge: 36_000 });
+      .toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults, serviceCharge: 36_000 });
+  });
+
+  it("normalizes every explicit amount even when tax is the first object field", () => {
+    expect(extractReceiptScan('Result: {"tax":"$7.00","serviceCharge":"$36.00","tip":"12,50","billDiscount":"$5.00","otherFees":"$2.00","receiptTotal":"$243.50","items":[{"name":"Food","price":191}]}'))
+      .toEqual({ items: [{ name: "Food", price: 191 }], tax: 7, serviceCharge: 36, tip: 12.5, billDiscount: 5, otherFees: 2, receiptTotal: 243.5 });
+  });
+
+  it.each(["tax", "serviceCharge", "tip", "billDiscount", "otherFees"])(
+    "defaults invalid %s amounts to zero while preserving items",
+    (field) => {
+      for (const invalid of [-7, "-7", "−7", "10%", "10％", "unknown", null, true, {}, "", "9".repeat(400)]) {
+        expect(extractReceiptScan(JSON.stringify({ items: [{ name: "Tea", price: 3 }], [field]: invalid })))
+          .toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults });
+      }
+    },
+  );
+
+  it.each([undefined, null, -234, "-$234", "234%", "unknown", false, {}, "", "9".repeat(400)])(
+    "keeps missing or invalid printed total %j unknown",
+    (receiptTotal) => {
+      expect(extractReceiptScan(JSON.stringify({ items: [{ name: "Tea", price: 3 }], receiptTotal })))
+        .toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults });
+    },
+  );
+
+  it("preserves an explicit zero printed total", () => {
+    expect(extractReceiptScan('{"items":[{"name":"Tea","price":3}],"receiptTotal":0}'))
+      .toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults, receiptTotal: 0 });
   });
 
   it.each([-36, "-36", "-$36", "10%", "10 %", "10％"])(
@@ -48,7 +78,7 @@ describe("extractReceiptScan", () => {
     (serviceCharge) => {
       expect(extractReceiptScan(JSON.stringify({
         items: [{ name: "Egust", price: 35 }], serviceCharge,
-      }))).toEqual({ items: [{ name: "Egust", price: 35 }], serviceCharge: 0 });
+      }))).toEqual({ items: [{ name: "Egust", price: 35 }], ...defaults });
     },
   );
 
@@ -59,6 +89,6 @@ describe("extractReceiptScan", () => {
     ['not JSON', { items: [], serviceCharge: 0 }],
     ['null', { items: [], serviceCharge: 0 }],
   ])("handles legacy or unusable output %s", (raw, expected) => {
-    expect(extractReceiptScan(raw)).toEqual(expected);
+    expect(extractReceiptScan(raw)).toEqual({ ...defaults, ...expected });
   });
 });

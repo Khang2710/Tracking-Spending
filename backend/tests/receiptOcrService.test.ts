@@ -9,12 +9,12 @@ import {
 const payload = { imageBase64: "aGVsbG8=", mimeType: "image/jpeg" } as const;
 
 describe("receipt OCR provider orchestration", () => {
-  it("returns parsed items from the first successful provider", async () => {
-    const groq: OcrProvider = { extract: vi.fn().mockResolvedValue('{"items":[{"name":"Tea","price":3}],"serviceCharge":36}') };
+  it("returns the full breakdown from the first successful provider", async () => {
+    const groq: OcrProvider = { extract: vi.fn().mockResolvedValue('{"items":[{"name":"Food","price":191}],"tax":7,"serviceCharge":36,"tip":0,"billDiscount":0,"otherFees":0,"receiptTotal":234}') };
     const fallback: OcrProvider = { extract: vi.fn() };
     const service = createReceiptOcrService([groq, fallback]);
 
-    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Tea", price: 3 }], serviceCharge: 36 });
+    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Food", price: 191 }], tax: 7, serviceCharge: 36, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: 234 });
     expect(fallback.extract).not.toHaveBeenCalled();
   });
 
@@ -25,7 +25,7 @@ describe("receipt OCR provider orchestration", () => {
     };
     const service = createReceiptOcrService([groq, openRouter]);
 
-    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Rice", price: 12_000 }], serviceCharge: 0 });
+    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Rice", price: 12_000 }], tax: 0, serviceCharge: 0, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null });
   });
 
   it("falls back when a provider returns a charge without purchased items", async () => {
@@ -35,7 +35,7 @@ describe("receipt OCR provider orchestration", () => {
     };
 
     await expect(createReceiptOcrService([empty, fallback]).extract(payload)).resolves.toEqual({
-      items: [{ name: "Egust", price: 35 }], serviceCharge: 36,
+      items: [{ name: "Egust", price: 35 }], tax: 0, serviceCharge: 36, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null,
     });
   });
 

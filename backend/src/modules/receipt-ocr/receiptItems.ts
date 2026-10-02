@@ -5,7 +5,12 @@ export interface ReceiptItem {
 
 export interface ReceiptScanResult {
   items: ReceiptItem[];
+  tax: number;
   serviceCharge: number;
+  tip: number;
+  billDiscount: number;
+  otherFees: number;
+  receiptTotal: number | null;
 }
 
 export function parseReceiptPrice(rawPrice: unknown): number {
@@ -36,7 +41,7 @@ function parseReceiptJson(raw: string): unknown {
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/```(?:json)?/gi, "")
     .trim();
-  const objectMatch = clean.match(/\{\s*"(?:items|serviceCharge)"[\s\S]*\}/);
+  const objectMatch = clean.match(/\{\s*"(?:items|tax|serviceCharge|tip|billDiscount|otherFees|receiptTotal)"[\s\S]*\}/);
   const arrayMatch = clean.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
   return JSON.parse(objectMatch?.[0] ?? arrayMatch?.[0] ?? clean);
@@ -64,21 +69,32 @@ export function extractReceiptItems(raw: string): ReceiptItem[] {
   }
 }
 
-function parseServiceCharge(raw: unknown): number {
-  if (typeof raw === "number" && raw < 0) return 0;
-  if (typeof raw === "string" && /[-−%％]/.test(raw)) return 0;
+function parseReceiptAmount(raw: unknown): number | null {
+  if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 ? raw : null;
+  if (typeof raw !== "string" || /[-−%％]/.test(raw) || !/\d/.test(raw)) return null;
   const amount = parseReceiptPrice(raw);
-  return Number.isFinite(amount) ? amount : 0;
+  return Number.isFinite(amount) ? amount : null;
 }
 
 export function extractReceiptScan(raw: string): ReceiptScanResult {
+  const defaults: ReceiptScanResult = {
+    items: [], tax: 0, serviceCharge: 0, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null,
+  };
   try {
     const parsed = parseReceiptJson(raw);
-    const serviceCharge = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? parseServiceCharge((parsed as { serviceCharge?: unknown }).serviceCharge)
-      : 0;
-    return { items: extractReceiptItems(raw), serviceCharge };
+    const amounts = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+    return {
+      items: extractReceiptItems(raw),
+      tax: parseReceiptAmount(amounts.tax) ?? 0,
+      serviceCharge: parseReceiptAmount(amounts.serviceCharge) ?? 0,
+      tip: parseReceiptAmount(amounts.tip) ?? 0,
+      billDiscount: parseReceiptAmount(amounts.billDiscount) ?? 0,
+      otherFees: parseReceiptAmount(amounts.otherFees) ?? 0,
+      receiptTotal: parseReceiptAmount(amounts.receiptTotal),
+    };
   } catch {
-    return { items: [], serviceCharge: 0 };
+    return defaults;
   }
 }

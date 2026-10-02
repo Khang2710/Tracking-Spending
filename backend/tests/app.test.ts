@@ -1,7 +1,7 @@
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
-import { NoOcrProviderError, OcrProviderError } from "../src/modules/receipt-ocr/ocr.service.js";
+import { createReceiptOcrService, NoOcrProviderError, OcrProviderError } from "../src/modules/receipt-ocr/ocr.service.js";
 
 describe("backend API", () => {
   const authenticated = { verifyAccessToken: vi.fn().mockResolvedValue({ id: "user-1" }) };
@@ -35,17 +35,16 @@ describe("backend API", () => {
     expect(extractReceipt).not.toHaveBeenCalled();
   });
 
-  it("returns normalized OCR items and receipt service charge", async () => {
-    const extractReceipt = vi.fn().mockResolvedValue({
-      items: [{ name: "Coffee", price: 5 }],
-      serviceCharge: 1,
-    });
-    const app = createApp({ extractReceipt, ...authenticated });
+  it("returns the complete normalized receipt breakdown", async () => {
+    const service = createReceiptOcrService([{
+      extract: async () => '{"items":[{"name":"Food","price":191}],"tax":7,"serviceCharge":36,"tip":0,"billDiscount":0,"otherFees":0,"receiptTotal":234}',
+    }]);
+    const app = createApp({ extractReceipt: service.extract, ...authenticated });
 
     await withAuth(request(app)
       .post("/api/ocr")
       .send({ imageBase64: "iVBORw0KGgo=", mimeType: "image/png" }))
-      .expect(200, { items: [{ name: "Coffee", price: 5 }], serviceCharge: 1 });
+      .expect(200, { items: [{ name: "Food", price: 191 }], tax: 7, serviceCharge: 36, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: 234 });
   });
 
   it("maps missing configuration to 503 and provider failures to 502", async () => {
@@ -78,6 +77,11 @@ describe("backend API", () => {
       extractReceipt: vi.fn().mockResolvedValue({
         items: [{ name: "Coffee", price: 5 }],
         serviceCharge: 0,
+        tax: 0,
+        tip: 0,
+        billDiscount: 0,
+        otherFees: 0,
+        receiptTotal: null,
       }),
       ...authenticated,
       ocrLimit: { maxRequests: 2, windowMs: 60_000 },
