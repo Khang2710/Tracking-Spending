@@ -3,11 +3,11 @@ import { Sparkles, Camera, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { C } from "../../App";
-import { processReceiptOcr, OcrParsedItem } from "../../services/ocrService";
+import { processReceiptOcr, type OcrScanResult } from "../../services/ocrService";
 import { compressImage } from "../../utils/imageCompressor";
 
 interface OcrScannerCardProps {
-  onItemsParsed: (items: OcrParsedItem[]) => void;
+  onItemsParsed: (result: OcrScanResult) => void;
 }
 
 export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
@@ -68,7 +68,7 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
         setOcrProgress(30);
         setOcrLoadingText(t("split.aiAnalyzing", "Analyzing receipt..."));
 
-        const items = await processReceiptOcr({
+        const result = await processReceiptOcr({
           pureBase64,
           mimeType,
           signal,
@@ -88,8 +88,8 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
           },
         });
 
-        if (!signal.aborted && items && items.length > 0) {
-          onItemsParsed(items);
+        if (!signal.aborted && result.items.length > 0) {
+          onItemsParsed(result);
         }
       }
     } catch (err: any) {

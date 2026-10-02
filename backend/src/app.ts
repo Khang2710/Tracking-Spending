@@ -10,12 +10,12 @@ import {
   validateOcrRequest,
   type OcrPayload,
 } from "./modules/receipt-ocr/ocr.schemas.js";
-import type { ReceiptItem } from "./modules/receipt-ocr/receiptItems.js";
+import type { ReceiptScanResult } from "./modules/receipt-ocr/receiptItems.js";
 import { createFinanceRouter } from "./modules/finance/finance.routes.js";
 import type { FinanceService } from "./modules/finance/finance.repository.js";
 
 export interface AppDependencies {
-  extractReceipt(payload: OcrPayload): Promise<ReceiptItem[]>;
+  extractReceipt(payload: OcrPayload): Promise<ReceiptScanResult>;
   verifyAccessToken: VerifyAccessToken;
   frontendOrigins?: string[];
   finance?: FinanceService;

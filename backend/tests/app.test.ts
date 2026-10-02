@@ -35,14 +35,17 @@ describe("backend API", () => {
     expect(extractReceipt).not.toHaveBeenCalled();
   });
 
-  it("returns normalized OCR items", async () => {
-    const extractReceipt = vi.fn().mockResolvedValue([{ name: "Coffee", price: 5 }]);
+  it("returns normalized OCR items and receipt service charge", async () => {
+    const extractReceipt = vi.fn().mockResolvedValue({
+      items: [{ name: "Coffee", price: 5 }],
+      serviceCharge: 1,
+    });
     const app = createApp({ extractReceipt, ...authenticated });
 
     await withAuth(request(app)
       .post("/api/ocr")
       .send({ imageBase64: "iVBORw0KGgo=", mimeType: "image/png" }))
-      .expect(200, [{ name: "Coffee", price: 5 }]);
+      .expect(200, { items: [{ name: "Coffee", price: 5 }], serviceCharge: 1 });
   });
 
   it("maps missing configuration to 503 and provider failures to 502", async () => {
@@ -72,7 +75,10 @@ describe("backend API", () => {
 
   it("limits repeated paid OCR requests per authenticated user", async () => {
     const app = createApp({
-      extractReceipt: vi.fn().mockResolvedValue([{ name: "Coffee", price: 5 }]),
+      extractReceipt: vi.fn().mockResolvedValue({
+        items: [{ name: "Coffee", price: 5 }],
+        serviceCharge: 0,
+      }),
       ...authenticated,
       ocrLimit: { maxRequests: 2, windowMs: 60_000 },
     });

@@ -5,6 +5,11 @@ export interface OcrParsedItem {
   price: number;
 }
 
+export interface OcrScanResult {
+  items: OcrParsedItem[];
+  serviceCharge: number;
+}
+
 export interface ProcessReceiptOptions {
   pureBase64: string;
   mimeType: string;
@@ -36,12 +41,12 @@ export async function processReceiptOcr({
   mimeType,
   signal,
   onProgress,
-}: ProcessReceiptOptions): Promise<OcrParsedItem[]> {
+}: ProcessReceiptOptions): Promise<OcrScanResult> {
   onProgress?.(25, "AI Proxy OCR");
 
   try {
     const data = await withTimeout(
-      (requestSignal) => apiRequest<unknown[]>("/api/ocr", {
+      (requestSignal) => apiRequest<unknown>("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
@@ -50,12 +55,12 @@ export async function processReceiptOcr({
       35_000,
       signal,
     );
-    if (!Array.isArray(data)) {
+    if (typeof data !== "object" || data === null || !("items" in data) || !Array.isArray(data.items)) {
       onProgress?.(100, "Finished");
-      return [];
+      return { items: [], serviceCharge: 0 };
     }
 
-    const items = data.filter(
+    const items = data.items.filter(
       (item): item is OcrParsedItem =>
         typeof item === "object" &&
         item !== null &&
@@ -63,8 +68,14 @@ export async function processReceiptOcr({
         typeof (item as OcrParsedItem).price === "number",
     );
 
+    const serviceCharge = "serviceCharge" in data &&
+      typeof data.serviceCharge === "number" &&
+      Number.isFinite(data.serviceCharge) && data.serviceCharge >= 0
+      ? data.serviceCharge
+      : 0;
+
     onProgress?.(100, items.length > 0 ? "Success" : "Finished");
-    return items;
+    return { items, serviceCharge };
   } catch (error) {
     onProgress?.(100, "Finished");
     throw error;
