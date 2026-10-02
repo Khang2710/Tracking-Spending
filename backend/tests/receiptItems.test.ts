@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractReceiptItems, parseReceiptPrice } from "../src/modules/receipt-ocr/receiptItems.js";
+import { extractReceiptItems, extractReceiptScan, parseReceiptPrice } from "../src/modules/receipt-ocr/receiptItems.js";
 
 describe("parseReceiptPrice", () => {
   it.each([
@@ -29,5 +29,27 @@ describe("extractReceiptItems", () => {
     const raw = '[{"name":"","price":12},{"name":"Tea","price":"unknown"}]';
 
     expect(extractReceiptItems(raw)).toEqual([]);
+  });
+});
+
+describe("extractReceiptScan", () => {
+  it("returns purchased items and the separate service charge", () => {
+    expect(extractReceiptScan('{"items":[{"name":"Egust","price":35}],"serviceCharge":36}'))
+      .toEqual({ items: [{ name: "Egust", price: 35 }], serviceCharge: 36 });
+  });
+
+  it("normalizes service charge amounts in wrapped model JSON", () => {
+    expect(extractReceiptScan('<think>reading</think>```json\n{"serviceCharge":"36.000","items":[{"name":"Tea","price":3}]}\n```'))
+      .toEqual({ items: [{ name: "Tea", price: 3 }], serviceCharge: 36_000 });
+  });
+
+  it.each([
+    ['[{"name":"Tea","price":3}]', { items: [{ name: "Tea", price: 3 }], serviceCharge: 0 }],
+    ['{"items":[{"name":"Tea","price":3}]}', { items: [{ name: "Tea", price: 3 }], serviceCharge: 0 }],
+    ['{"items":[],"serviceCharge":"unknown"}', { items: [], serviceCharge: 0 }],
+    ['not JSON', { items: [], serviceCharge: 0 }],
+    ['null', { items: [], serviceCharge: 0 }],
+  ])("handles legacy or unusable output %s", (raw, expected) => {
+    expect(extractReceiptScan(raw)).toEqual(expected);
   });
 });

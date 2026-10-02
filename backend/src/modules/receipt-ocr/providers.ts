@@ -1,7 +1,7 @@
 import type { OcrPayload } from "./ocr.schemas.js";
 import type { OcrProvider } from "./ocr.service.js";
 
-const RECEIPT_PROMPT = `Extract every purchased receipt line and its line total. Return only a JSON array with objects shaped as {"name":"item","price":12.34}. Use the line total, not quantity or unit price. Exclude tax, tips, discounts, and payment lines. Price must be a positive JSON number without currency symbols.`;
+const RECEIPT_PROMPT = `Extract every purchased receipt line and its line total. Return only a JSON object shaped as {"items":[{"name":"item","price":12.34}],"serviceCharge":0}. Use the line total, not quantity or unit price. Read the explicit monetary amount from lines such as "Service Charge" into serviceCharge; do not infer it from a percentage. Use 0 when no service charge amount is present. Exclude service charge lines from items. Exclude tax, tips, discounts, payment lines, subtotals, and receipt totals from both items and serviceCharge. Prices must be positive JSON numbers without currency symbols; serviceCharge must be a nonnegative JSON number.`;
 
 interface ProviderOptions {
   apiKey: string;

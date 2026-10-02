@@ -10,11 +10,11 @@ const payload = { imageBase64: "aGVsbG8=", mimeType: "image/jpeg" } as const;
 
 describe("receipt OCR provider orchestration", () => {
   it("returns parsed items from the first successful provider", async () => {
-    const groq: OcrProvider = { extract: vi.fn().mockResolvedValue('[{"name":"Tea","price":3}]') };
+    const groq: OcrProvider = { extract: vi.fn().mockResolvedValue('{"items":[{"name":"Tea","price":3}],"serviceCharge":36}') };
     const fallback: OcrProvider = { extract: vi.fn() };
     const service = createReceiptOcrService([groq, fallback]);
 
-    await expect(service.extract(payload)).resolves.toEqual([{ name: "Tea", price: 3 }]);
+    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Tea", price: 3 }], serviceCharge: 36 });
     expect(fallback.extract).not.toHaveBeenCalled();
   });
 
@@ -25,7 +25,18 @@ describe("receipt OCR provider orchestration", () => {
     };
     const service = createReceiptOcrService([groq, openRouter]);
 
-    await expect(service.extract(payload)).resolves.toEqual([{ name: "Rice", price: 12_000 }]);
+    await expect(service.extract(payload)).resolves.toEqual({ items: [{ name: "Rice", price: 12_000 }], serviceCharge: 0 });
+  });
+
+  it("falls back when a provider returns a charge without purchased items", async () => {
+    const empty: OcrProvider = { extract: async () => '{"items":[],"serviceCharge":36}' };
+    const fallback: OcrProvider = {
+      extract: async () => '{"items":[{"name":"Egust","price":35}],"serviceCharge":36}',
+    };
+
+    await expect(createReceiptOcrService([empty, fallback]).extract(payload)).resolves.toEqual({
+      items: [{ name: "Egust", price: 35 }], serviceCharge: 36,
+    });
   });
 
   it("reports missing provider configuration", async () => {

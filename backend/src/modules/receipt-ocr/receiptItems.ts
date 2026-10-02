@@ -3,6 +3,11 @@ export interface ReceiptItem {
   price: number;
 }
 
+export interface ReceiptScanResult {
+  items: ReceiptItem[];
+  serviceCharge: number;
+}
+
 export function parseReceiptPrice(rawPrice: unknown): number {
   if (typeof rawPrice === "number") {
     return Number.isFinite(rawPrice) ? Math.abs(rawPrice) : 0;
@@ -26,16 +31,20 @@ export function parseReceiptPrice(rawPrice: unknown): number {
   return Number(unsigned.replace(/,/g, "")) || 0;
 }
 
-export function extractReceiptItems(raw: string): ReceiptItem[] {
+function parseReceiptJson(raw: string): unknown {
   const clean = raw
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/```(?:json)?/gi, "")
     .trim();
-  const objectMatch = clean.match(/\{\s*"items"[\s\S]*\}/);
+  const objectMatch = clean.match(/\{\s*"(?:items|serviceCharge)"[\s\S]*\}/);
   const arrayMatch = clean.match(/\[\s*\{[\s\S]*\}\s*\]/);
 
+  return JSON.parse(objectMatch?.[0] ?? arrayMatch?.[0] ?? clean);
+}
+
+export function extractReceiptItems(raw: string): ReceiptItem[] {
   try {
-    const parsed: unknown = JSON.parse(objectMatch?.[0] ?? arrayMatch?.[0] ?? clean);
+    const parsed = parseReceiptJson(raw);
     const candidates = Array.isArray(parsed)
       ? parsed
       : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { items?: unknown }).items)
@@ -52,5 +61,17 @@ export function extractReceiptItems(raw: string): ReceiptItem[] {
     });
   } catch {
     return [];
+  }
+}
+
+export function extractReceiptScan(raw: string): ReceiptScanResult {
+  try {
+    const parsed = parseReceiptJson(raw);
+    const serviceCharge = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parseReceiptPrice((parsed as { serviceCharge?: unknown }).serviceCharge)
+      : 0;
+    return { items: extractReceiptItems(raw), serviceCharge };
+  } catch {
+    return { items: [], serviceCharge: 0 };
   }
 }
