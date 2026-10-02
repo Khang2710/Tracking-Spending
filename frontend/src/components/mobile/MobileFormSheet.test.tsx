@@ -64,6 +64,7 @@ describe("MobileFormSheet", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     document.body.style.overflow = originalOverflow;
@@ -95,6 +96,17 @@ describe("MobileFormSheet", () => {
     expect(screen.getByRole("dialog")).toHaveStyle({ "--keyboard-offset": "0px" });
   });
 
+  it("limits a tall sheet to the displaced visual viewport height", () => {
+    render(<MobileFormSheet {...props} open><div style={{ height: 1000 }}>Tall form</div></MobileFormSheet>);
+    act(() => { viewport.resizeTo(520); viewport.scrollTo(80); });
+    expect(screen.getByRole("dialog")).toHaveStyle({ bottom: "244px", maxHeight: "520px" });
+  });
+
+  it("gives portalled controls the paper theme scope", () => {
+    render(<MobileFormSheet {...props} open><input aria-label="Description" /></MobileFormSheet>);
+    expect(screen.getByRole("dialog")).toHaveClass("paper-ledger");
+  });
+
   it("measures an already-open keyboard on mount and after reopening", () => {
     viewport.height = 520;
     const { rerender } = render(<MobileFormSheet {...props} open>{null}</MobileFormSheet>);
@@ -111,6 +123,7 @@ describe("MobileFormSheet", () => {
     expect(screen.getByRole("dialog", { name: "New Transaction" })).toHaveAccessibleDescription("Add transaction");
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
     expect(screen.getByRole("dialog")).toHaveStyle({ "--keyboard-offset": "0px" });
+    expect(screen.getByRole("dialog")).toHaveStyle({ maxHeight: "100dvh" });
     expect(screen.getByRole("button", { name: "Save transaction" })).toBeInTheDocument();
   });
 
@@ -167,5 +180,25 @@ describe("MobileFormSheet", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(document.body.style.overflow).toBe("");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("ignores stale close autofocus when reopened from a new trigger", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const fixture = (open: boolean) => <><button>First trigger</button><button>Newest trigger</button><MobileFormSheet {...props} open={open}><input aria-label="Description" /></MobileFormSheet></>;
+    const { rerender } = render(fixture(false));
+    const firstTrigger = screen.getByRole("button", { name: "First trigger" });
+    const newestTrigger = screen.getByRole("button", { name: "Newest trigger" });
+    firstTrigger.focus();
+    rerender(fixture(true));
+    flushFrames();
+    rerender(fixture(false));
+    newestTrigger.focus();
+    rerender(fixture(true));
+    flushFrames();
+    act(() => vi.runOnlyPendingTimers());
+    expect(screen.getByRole("textbox")).toHaveFocus();
+    rerender(fixture(false));
+    act(() => vi.runOnlyPendingTimers());
+    expect(newestTrigger).toHaveFocus();
   });
 });
