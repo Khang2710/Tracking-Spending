@@ -99,6 +99,7 @@ export interface Transaction {
   amount: number;
   category: string;
   walletId: number;
+  note?: string | null;
 }
 
 export interface Wallet {
@@ -3053,7 +3054,7 @@ export default function App() {
   const screen = activeTab === "home" ? (
     <PaperHomeScreen
       wallets={wallets}
-      transactions={filteredTransactions}
+      transactions={filteredTransactions.map((transaction) => ({ ...transaction, note: transaction.note ?? null }))}
       budget={budget}
       onEditBudget={() => setIsBudgetModalOpen(true)}
       onAddTransaction={() => setIsTxModalOpen(true)}

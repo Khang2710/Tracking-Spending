@@ -15,6 +15,7 @@ interface CloudTransaction {
   occurred_on: string;
   amount: string | number;
   category: string;
+  note?: string | null;
 }
 
 interface CloudSavingsGoal {
@@ -83,6 +84,7 @@ export function mapCloudFinance(rows: CloudFinanceRows): MappedCloudFinance {
       date: transaction.occurred_on,
       amount: Number(transaction.amount),
       category: transaction.category,
+      note: transaction.note?.trim() || null,
     }];
   });
 
@@ -148,7 +150,9 @@ export async function deleteCloudWallet(id: string): Promise<void> {
   await apiRequest(`/api/finance/wallets/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function createCloudTransaction(transaction: Transaction, walletCloudId: string): Promise<string> {
+type TransactionWrite = Omit<Transaction, "note"> & { note?: string | null };
+
+export async function createCloudTransaction(transaction: TransactionWrite, walletCloudId: string): Promise<string> {
   const result = await apiRequest<{ id: string }>("/api/finance/transactions", {
     method: "POST",
     body: JSON.stringify({
@@ -157,12 +161,13 @@ export async function createCloudTransaction(transaction: Transaction, walletClo
       occurredOn: transaction.date,
       amount: transaction.amount,
       category: transaction.category,
+      note: transaction.note?.trim() || null,
     }),
   });
   return result.id;
 }
 
-export async function updateCloudTransaction(id: string, transaction: Transaction, walletCloudId: string): Promise<void> {
+export async function updateCloudTransaction(id: string, transaction: TransactionWrite, walletCloudId: string): Promise<void> {
   await apiRequest(`/api/finance/transactions/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify({
@@ -171,6 +176,7 @@ export async function updateCloudTransaction(id: string, transaction: Transactio
       occurredOn: transaction.date,
       amount: transaction.amount,
       category: transaction.category,
+      note: transaction.note?.trim() || null,
     }),
   });
 }
