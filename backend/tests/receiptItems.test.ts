@@ -60,6 +60,26 @@ describe("extractReceiptScan", () => {
     },
   );
 
+  it.each(["unknown (confidence 90)", "12.34.56", "(7.00)"])(
+    "rejects malformed amount %j across adjustments and printed total while preserving items",
+    (amount) => {
+      expect(extractReceiptScan(JSON.stringify({
+        items: [{ name: "Tea", price: 3 }],
+        tax: amount, serviceCharge: amount, tip: amount,
+        billDiscount: amount, otherFees: amount, receiptTotal: amount,
+      }))).toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults });
+    },
+  );
+
+  it.each([
+    ["$7.00", 7], ["7.00 €", 7], ["1,234.56", 1234.56],
+    ["1.234,56", 1234.56], ["36.000", 36000], ["12,50", 12.5],
+  ])("retains valid monetary string %j as %d", (amount, expected) => {
+    expect(extractReceiptScan(JSON.stringify({
+      items: [{ name: "Tea", price: 3 }], tax: amount, receiptTotal: amount,
+    }))).toEqual({ items: [{ name: "Tea", price: 3 }], ...defaults, tax: expected, receiptTotal: expected });
+  });
+
   it.each([undefined, null, -234, "-$234", "234%", "unknown", false, {}, "", "9".repeat(400)])(
     "keeps missing or invalid printed total %j unknown",
     (receiptTotal) => {

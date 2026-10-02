@@ -71,7 +71,9 @@ export function extractReceiptItems(raw: string): ReceiptItem[] {
 
 function parseReceiptAmount(raw: unknown): number | null {
   if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 ? raw : null;
-  if (typeof raw !== "string" || /[-−%％]/.test(raw) || !/\d/.test(raw)) return null;
+  if (typeof raw !== "string") return null;
+  const monetaryAmount = /^(?:\p{Sc}\s*)?(?:\d+(?:[.,]\d{1,2})?|\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)\s*\p{Sc}?$/u;
+  if (!monetaryAmount.test(raw.trim())) return null;
   const amount = parseReceiptPrice(raw);
   return Number.isFinite(amount) ? amount : null;
 }
