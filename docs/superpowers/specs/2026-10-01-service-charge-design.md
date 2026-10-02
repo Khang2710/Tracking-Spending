@@ -1,27 +1,33 @@
-# Service charge for split bills
+# Receipt breakdown for split bills
 
 ## Goal
 
-Include a fixed service-charge amount from a scanned receipt in the split-bill total and each participant's debt.
+Turn a scanned restaurant receipt into an editable, fair split-bill breakdown: purchased items, tax, service charge, gratuity/tip, discounts, other explicit fees, and the printed total.
 
 ## Receipt scan
 
-The receipt OCR response will include a `serviceCharge` amount when the receipt contains an explicit service-charge line. The scanner will leave the value at zero when no such line exists. The value is interpreted in the currently selected app currency and converted to the app's VND-based storage amount before it is used in calculations.
+The OCR response contains `items`, `tax`, `serviceCharge`, `tip`, `billDiscount`, `otherFees`, and `receiptTotal`. Every value is an amount written on the receipt, never an inferred percentage. An item may include a `discount` only when the receipt clearly ties it to that item; otherwise the amount goes into `billDiscount`.
+
+The scanner defaults an absent or invalid fee to zero. `receiptTotal` is nullable because a receipt may not show a readable total. Monetary values are interpreted in the active app currency and converted to the VND-based storage amount exactly once at the Split Bill boundary.
 
 ## User interface
 
-The calculations panel will contain an editable `Service charge` monetary input next to Tax and Tip. OCR populates the input after a successful scan. The user may edit the amount or set it to zero.
+The calculation panel contains editable amount inputs for Tax, Service charge, Tip/gratuity, Bill discount, and Other fees. OCR fills these values after scanning, and the user can correct them before saving.
 
-## Calculation
+Each selected item can expose an editable item discount. The debt panel lists item cost, item discounts, bill discount, tax, service charge, tip, and other fees when non-zero. A receipt-total indicator compares the calculated total with the printed total and shows a clear difference if they do not match.
 
-The grand total is `items subtotal + tax + service charge + tip`. Tax and tip keep their existing user-entered behavior; this change only detects and fills service charge.
+## Allocation rules
 
-The service charge and tip are each split equally among all participants. Tax remains proportional to each participant's item subtotal. The debt distribution details show separate lines for item cost, tax, service charge, and tip when their values are non-zero.
+1. Item discounts reduce only the people assigned to that item.
+2. Bill discount is distributed proportionally to each participant's discounted item subtotal; if nobody has item cost, it is divided equally.
+3. Tax is distributed proportionally to each participant's discounted item subtotal; if nobody has item cost, it is divided equally.
+4. Service charge, tip/gratuity, and other fees are divided equally among all participants.
+5. The grand total is `item subtotal - item discounts - bill discount + tax + service charge + tip + other fees`.
 
 ## Acceptance example
 
-For the supplied USD receipt: item subtotal `$191`, scanned service charge `$36`, user-entered tax `$7`, and tip `$0` produce a total of `$234`. With one participant, that person owes `$234`; with multiple participants, the `$36` service charge is split equally.
+For the supplied USD receipt, the item subtotal is `$191`, service charge `$36`, tax `$7`, and no tip or discount. The calculated total is `$234`, matching the printed receipt total. With two people who both share all items, each debt includes `$18` service charge and `$3.50` tax.
 
 ## Error handling and tests
 
-If OCR does not return a valid service-charge value, the app keeps the input at zero and continues with the item list. Unit tests cover receipt parsing, the USD storage conversion, the total, and each debt's service-charge share.
+OCR must not turn negative amounts or percentages into charges. Invalid values default to zero without discarding valid items. Unit tests cover parsing, currency conversion, allocation of every adjustment, the printed-total reconciliation, and an item-specific discount.
