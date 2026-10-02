@@ -26,11 +26,14 @@ vi.mock("../finance-data/finance.repository", async (importOriginal) => ({
 
 function workspace(): MappedCloudFinance {
   return {
-    wallets: [{ id: 8, label: "Cash", balance: 250_000, accent: "#746783" }],
+    wallets: [
+      { id: 3, label: "Cash", balance: 250_000, accent: "#746783" },
+      { id: 8, label: "Bank", balance: 500_000, accent: "#4F7D62" },
+    ],
     transactions: [],
     savingsGoals: [],
     budget: 0,
-    walletCloudIds: new Map([[8, "wallet-cloud-8"]]),
+    walletCloudIds: new Map([[3, "wallet-cloud-3"], [8, "wallet-cloud-8"]]),
     transactionCloudIds: new Map(),
     savingsGoalCloudIds: new Map(),
     budgetCloudId: null,
@@ -54,6 +57,7 @@ async function openMobileTransaction() {
   const sheet = screen.getByRole("dialog", { name: "New Transaction" });
   await user.type(within(sheet).getByLabelText("Description"), "Taxi");
   await user.type(within(sheet).getByLabelText("Amount"), "45000");
+  await user.selectOptions(within(sheet).getByLabelText("Wallet"), "8");
   await user.clear(within(sheet).getByLabelText("Transaction date"));
   await user.type(within(sheet).getByLabelText("Transaction date"), "2026-10-02");
   await user.click(within(sheet).getByRole("button", { name: "Add note" }));
@@ -92,7 +96,7 @@ describe("mobile New Transaction App flow", () => {
     expect(sheet).toBeInTheDocument();
 
     const refreshed = workspace();
-    refreshed.wallets[0].balance = 205_000;
+    refreshed.wallets[1].balance = 455_000;
     refreshed.transactions = [{
       id: 12, name: "Taxi", amount: -45000, category: "Fuel", date: "2026-10-02", walletId: 8, note: "Taxi home",
     }];
@@ -102,7 +106,9 @@ describe("mobile New Transaction App flow", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "New Transaction" })).not.toBeInTheDocument());
     expect(screen.getAllByText("Taxi").length).toBeGreaterThan(0);
     expect(JSON.parse(localStorage.getItem("wealthy_v2_transactions")!)).toEqual(refreshed.transactions);
-    expect(JSON.parse(localStorage.getItem("wealthy_v2_wallets")!)[0].balance).toBe(205_000);
+    const cachedWallets = JSON.parse(localStorage.getItem("wealthy_v2_wallets")!);
+    expect(cachedWallets[0].balance).toBe(250_000);
+    expect(cachedWallets[1].balance).toBe(455_000);
   });
 
   it.each(["creation", "refresh"] as const)("keeps the sheet and note available when %s fails", async (stage) => {
