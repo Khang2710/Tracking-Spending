@@ -43,6 +43,15 @@ describe("extractReceiptScan", () => {
       .toEqual({ items: [{ name: "Tea", price: 3 }], serviceCharge: 36_000 });
   });
 
+  it.each([-36, "-36", "-$36", "10%", "10 %", "10％"])(
+    "rejects invalid service charge %j while preserving purchased items",
+    (serviceCharge) => {
+      expect(extractReceiptScan(JSON.stringify({
+        items: [{ name: "Egust", price: 35 }], serviceCharge,
+      }))).toEqual({ items: [{ name: "Egust", price: 35 }], serviceCharge: 0 });
+    },
+  );
+
   it.each([
     ['[{"name":"Tea","price":3}]', { items: [{ name: "Tea", price: 3 }], serviceCharge: 0 }],
     ['{"items":[{"name":"Tea","price":3}]}', { items: [{ name: "Tea", price: 3 }], serviceCharge: 0 }],

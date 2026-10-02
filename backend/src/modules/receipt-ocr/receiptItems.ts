@@ -64,11 +64,18 @@ export function extractReceiptItems(raw: string): ReceiptItem[] {
   }
 }
 
+function parseServiceCharge(raw: unknown): number {
+  if (typeof raw === "number" && raw < 0) return 0;
+  if (typeof raw === "string" && /[-−%％]/.test(raw)) return 0;
+  const amount = parseReceiptPrice(raw);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 export function extractReceiptScan(raw: string): ReceiptScanResult {
   try {
     const parsed = parseReceiptJson(raw);
     const serviceCharge = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? parseReceiptPrice((parsed as { serviceCharge?: unknown }).serviceCharge)
+      ? parseServiceCharge((parsed as { serviceCharge?: unknown }).serviceCharge)
       : 0;
     return { items: extractReceiptItems(raw), serviceCharge };
   } catch {
