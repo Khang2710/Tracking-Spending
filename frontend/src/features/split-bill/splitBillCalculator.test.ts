@@ -26,7 +26,41 @@ describe("split bill calculation", () => {
     });
 
     expect(result.debts.map(({ tax, billDiscount }) => ({ tax, billDiscount })))
-      .toEqual([{ tax: 10_000, billDiscount: 5_000 }, { tax: 10_000, billDiscount: 5_000 }]);
+      .toEqual([{ tax: 10_000, billDiscount: 0 }, { tax: 10_000, billDiscount: 0 }]);
     expect(result.receiptDifference).toBeNull();
+  });
+
+  it("assigns indivisible VND residuals so debts always sum to the receipt total", () => {
+    const result = calculateSplitBill({
+      participants: ["Khang", "Minh", "An"],
+      items: [{ name: "Shared item", price: 3, discount: 0, consumers: [] }],
+      tax: 0,
+      serviceCharge: 1,
+      tip: 0,
+      billDiscount: 0,
+      otherFees: 0,
+      receiptTotal: 4,
+    });
+
+    expect(result.debts.map((debt) => debt.total)).toEqual([2, 1, 1]);
+    expect(result.debts.reduce((sum, debt) => sum + debt.total, 0)).toBe(result.grandTotal);
+    expect(result.receiptDifference).toBe(0);
+  });
+
+  it("caps a bill-wide discount at the discounted item subtotal", () => {
+    const result = calculateSplitBill({
+      participants: ["Khang"],
+      items: [{ name: "Dinner", price: 100, discount: 20, consumers: ["Khang"] }],
+      tax: 0,
+      serviceCharge: 0,
+      tip: 0,
+      billDiscount: 500,
+      otherFees: 0,
+      receiptTotal: 0,
+    });
+
+    expect(result.billDiscount).toBe(80);
+    expect(result.grandTotal).toBe(0);
+    expect(result.debts[0].total).toBe(0);
   });
 });

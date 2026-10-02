@@ -62,21 +62,22 @@ export default function AssignBill({
 
   const handleItemsParsed = (parsedResult: OcrScanResult) => {
     const parsedResultInStorage = toStoredOcrScanResult(parsedResult, currency);
-    let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-    const newSplitItems: SplitItem[] = parsedResultInStorage.items.map((item) => ({
-      id: nextId++,
-      name: item.name,
-      price: item.price,
-      discount: 0,
-      consumers: [],
-    }));
-    setItems((prev) => [...prev, ...newSplitItems]);
-    setTax(parsedResultInStorage.tax);
-    setServiceCharge(parsedResultInStorage.serviceCharge);
-    setTip(parsedResultInStorage.tip);
-    setBillDiscount(parsedResultInStorage.billDiscount);
-    setOtherFees(parsedResultInStorage.otherFees);
-    setReceiptTotal(parsedResultInStorage.receiptTotal);
+    setItems((prev) => {
+      let nextId = Math.max(0, ...prev.map((item) => item.id)) + 1;
+      const newSplitItems: SplitItem[] = parsedResultInStorage.items.map((item) => ({
+        id: nextId++, name: item.name, price: item.price, discount: 0, consumers: [],
+      }));
+      return [...prev, ...newSplitItems];
+    });
+    setTax((previous) => previous + parsedResultInStorage.tax);
+    setServiceCharge((previous) => previous + parsedResultInStorage.serviceCharge);
+    setTip((previous) => previous + parsedResultInStorage.tip);
+    setBillDiscount((previous) => previous + parsedResultInStorage.billDiscount);
+    setOtherFees((previous) => previous + parsedResultInStorage.otherFees);
+    setReceiptTotal((previous) => {
+      if (parsedResultInStorage.receiptTotal === null) return null;
+      return previous === null ? parsedResultInStorage.receiptTotal : previous + parsedResultInStorage.receiptTotal;
+    });
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -535,12 +536,12 @@ export default function AssignBill({
             {/* Receipt adjustments: OCR fills these when present; every field stays editable. */}
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Tax", value: tax, setValue: setTax },
-                { label: "Service charge", value: serviceCharge, setValue: setServiceCharge },
-                { label: "Tip / gratuity", value: tip, setValue: setTip },
-                { label: "Bill discount", value: billDiscount, setValue: setBillDiscount },
-                { label: "Other fees", value: otherFees, setValue: setOtherFees },
-                { label: "Receipt total", value: receiptTotal ?? 0, setValue: (value: number) => setReceiptTotal(value || null) },
+                { label: "Tax", value: tax, setValue: (value: number | null) => setTax(value ?? 0) },
+                { label: "Service charge", value: serviceCharge, setValue: (value: number | null) => setServiceCharge(value ?? 0) },
+                { label: "Tip / gratuity", value: tip, setValue: (value: number | null) => setTip(value ?? 0) },
+                { label: "Bill discount", value: billDiscount, setValue: (value: number | null) => setBillDiscount(value ?? 0) },
+                { label: "Other fees", value: otherFees, setValue: (value: number | null) => setOtherFees(value ?? 0) },
+                { label: "Receipt total", value: receiptTotal, setValue: (value: number | null) => setReceiptTotal(value) },
               ].map(({ label, value, setValue }) => (
                 <div key={label}>
                   <label htmlFor={`receipt-adjustment-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`} className="text-xs text-tm mb-1.5 block font-semibold">{label}</label>
@@ -549,8 +550,8 @@ export default function AssignBill({
                     type="number"
                     min="0"
                     placeholder="0"
-                    value={value ? toDisplayedSplitBillAmount(value, currency) : ""}
-                    onChange={(event) => setValue(toStoredSplitBillAmount(parseFloat(event.target.value) || 0, currency))}
+                    value={value === null ? "" : toDisplayedSplitBillAmount(value, currency)}
+                    onChange={(event) => setValue(event.target.value === "" ? null : toStoredSplitBillAmount(parseFloat(event.target.value) || 0, currency))}
                     className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                     style={{ borderColor: C.border }}
                   />

@@ -14,15 +14,35 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("./OcrScannerCard", () => ({
   OcrScannerCard: ({ onItemsParsed }: { onItemsParsed: (result: unknown) => void }) => (
-    <button type="button" onClick={() => onItemsParsed({
-      items: [{ name: "Dinner", price: 191 }],
-      tax: 7,
-      serviceCharge: 36,
-      tip: 0,
-      billDiscount: 0,
-      otherFees: 0,
-      receiptTotal: 234,
-    })}>Use scanned receipt</button>
+    <>
+      <button type="button" onClick={() => onItemsParsed({
+        items: [{ name: "Dinner", price: 191 }],
+        tax: 7,
+        serviceCharge: 36,
+        tip: 0,
+        billDiscount: 0,
+        otherFees: 0,
+        receiptTotal: 234,
+      })}>Use scanned receipt</button>
+      <button type="button" onClick={() => onItemsParsed({
+        items: [{ name: "Dessert", price: 10 }],
+        tax: 1,
+        serviceCharge: 2,
+        tip: 0,
+        billDiscount: 0,
+        otherFees: 0,
+        receiptTotal: 13,
+      })}>Use another receipt</button>
+      <button type="button" onClick={() => onItemsParsed({
+        items: [{ name: "Comped", price: 10 }],
+        tax: 0,
+        serviceCharge: 0,
+        tip: 0,
+        billDiscount: 10,
+        otherFees: 0,
+        receiptTotal: 0,
+      })}>Use zero-total receipt</button>
+    </>
   ),
 }));
 
@@ -51,5 +71,22 @@ describe("AssignBill receipt breakdown", () => {
     expect(screen.getByLabelText("Receipt total")).toHaveValue(234);
     expect(screen.getByText(/service charge \$36/i)).toBeInTheDocument();
     expect(screen.getByText("Matches receipt:")).toBeInTheDocument();
+  });
+
+  it("accumulates scanned receipt-level amounts and preserves an explicit zero total", () => {
+    render(
+      <CurrencyProvider>
+        <AssignBill friends={[]} onAddFriend={vi.fn()} onRemoveFriend={vi.fn()} balances={[]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
+      </CurrencyProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Use scanned receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use another receipt" }));
+    expect(screen.getByLabelText("Tax")).toHaveValue(8);
+    expect(screen.getByLabelText("Service charge")).toHaveValue(38);
+    expect(screen.getByLabelText("Receipt total")).toHaveValue(247);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use zero-total receipt" }));
+    expect(screen.getByLabelText("Receipt total")).toHaveValue(247);
   });
 });
