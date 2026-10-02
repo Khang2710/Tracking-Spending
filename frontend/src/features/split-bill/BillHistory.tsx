@@ -145,6 +145,9 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                           <span className="font-bold text-white">{item.name}</span>
                           <span className="font-semibold text-gold">{formatCurrency(item.price)}</span>
                         </div>
+                        {(item.discount ?? 0) > 0 && (
+                          <div className="text-xs font-semibold text-green">Item discount: −{formatCurrency(item.discount ?? 0)}</div>
+                        )}
                         <div className="flex flex-wrap gap-1.5 items-center">
                           <span className="text-[10px] text-tm uppercase font-bold tracking-wider mr-1">Consumers:</span>
                           {item.consumers.map((c) => (
@@ -162,18 +165,32 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   </div>
                 </div>
 
-                {/* Subtotals card */}
+                {/* Receipt adjustments. The taxPercent fallback keeps records saved before the upgrade readable. */}
                 <div className="p-4 rounded-2xl flex flex-col gap-2" style={{ background: C.surf + "15" }}>
-                  <div className="flex justify-between text-xs text-tm">
-                    <span>Tax ({selectedBill.taxPercent}%):</span>
-                    <span className="font-semibold text-white">
-                      {formatCurrency(selectedBill.items.reduce((s, i) => s + i.price, 0) * (selectedBill.taxPercent / 100))}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs text-tm">
-                    <span>Flat Tip:</span>
-                    <span className="font-semibold text-white">{formatCurrency(selectedBill.tip)}</span>
-                  </div>
+                  {(() => {
+                    const tax = selectedBill.tax ?? selectedBill.items.reduce((sum, item) => sum + item.price, 0) * ((selectedBill.taxPercent ?? 0) / 100);
+                    const itemDiscounts = selectedBill.items.reduce((sum, item) => sum + (item.discount ?? 0), 0);
+                    const adjustments = [
+                      ["Item discounts", itemDiscounts, "negative"],
+                      ["Bill discount", selectedBill.billDiscount ?? 0, "negative"],
+                      ["Tax", tax, "positive"],
+                      ["Service charge", selectedBill.serviceCharge ?? 0, "positive"],
+                      ["Tip / gratuity", selectedBill.tip ?? 0, "positive"],
+                      ["Other fees", selectedBill.otherFees ?? 0, "positive"],
+                    ] as const;
+                    return adjustments.filter(([, amount]) => amount > 0).map(([label, amount, direction]) => (
+                      <div key={label} className={`flex justify-between text-xs ${direction === "negative" ? "text-green" : "text-tm"}`}>
+                        <span>{label}:</span>
+                        <span className="font-semibold text-white">{direction === "negative" ? "−" : ""}{formatCurrency(amount)}</span>
+                      </div>
+                    ));
+                  })()}
+                  {selectedBill.receiptTotal !== null && selectedBill.receiptTotal !== undefined && (
+                    <div className="flex justify-between text-xs text-tm">
+                      <span>Receipt total:</span>
+                      <span className="font-semibold text-white">{formatCurrency(selectedBill.receiptTotal)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Debts distribution */}

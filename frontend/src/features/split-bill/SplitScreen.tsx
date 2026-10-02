@@ -11,9 +11,15 @@ export interface SavedBill {
   id: string;
   title: string;
   date: string;
-  items: { name: string; price: number; consumers: string[] }[];
-  taxPercent: number;
+  items: { name: string; price: number; discount?: number; consumers: string[] }[];
+  /** Retained only to render bills created before the receipt-breakdown upgrade. */
+  taxPercent?: number;
+  tax?: number;
+  serviceCharge?: number;
   tip: number;
+  billDiscount?: number;
+  otherFees?: number;
+  receiptTotal?: number | null;
   payer: string;
   debts: { name: string; total: number }[];
   grandTotal: number;

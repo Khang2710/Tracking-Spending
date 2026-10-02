@@ -44,11 +44,11 @@ interface ReceiptScanResult {
 }
 ```
 
-- [ ] Write failing tests for a receipt with `$7` tax, `$36` service charge, `$0` tip/discount/other fees, and `$234` total.
-- [ ] Run `npm test -- --run tests/receiptItems.test.ts tests/receiptOcrService.test.ts tests/app.test.ts`; confirm failure because current result omits fields.
-- [ ] Update the provider prompt to request the exact object; preserve items and default missing invalid adjustments to zero, but keep missing total as `null`.
-- [ ] Run `npm run typecheck && npm test && npm run build` in `backend`; confirm pass.
-- [ ] Commit: `feat: extract full receipt adjustments`.
+- [x] Write failing tests for a receipt with `$7` tax, `$36` service charge, `$0` tip/discount/other fees, and `$234` total.
+- [x] Run focused receipt tests; confirm the old result omitted the fields.
+- [x] Update the provider prompt to request the exact object; preserve items and default missing invalid adjustments to zero, but keep missing total as `null`.
+- [x] Run backend typecheck, build, and focused receipt tests.
+- [x] Commit: `feat: extract full receipt adjustments`.
 
 ### Task 2: Carry the full result through frontend OCR
 
@@ -74,10 +74,10 @@ interface OcrScanResult {
 }
 ```
 
-- [ ] Write failing client tests for every adjustment and nullable `receiptTotal`.
-- [ ] Run `npm test -- --run src/services/ocrService.test.ts src/features/split-bill/splitBillAmounts.test.ts`; confirm failure.
-- [ ] Normalize every non-total adjustment to a finite non-negative amount; preserve `receiptTotal: null`; keep API keys out of browser code.
-- [ ] Run the focused tests plus `npm run typecheck`; confirm pass.
+- [x] Write failing client tests for every adjustment and nullable `receiptTotal`.
+- [x] Run focused OCR and currency-conversion tests; confirm the old client result omitted the fields.
+- [x] Normalize every non-total adjustment to a finite non-negative amount; preserve `receiptTotal: null`; keep API keys out of browser code.
+- [x] Run the focused tests plus `npm run typecheck`.
 - [ ] Commit: `feat: carry receipt adjustments to split bills`.
 
 ### Task 3: Allocate adjustments and reconcile total
@@ -98,10 +98,10 @@ interface OcrScanResult {
 
 **Calculator output:** debt lines for `itemCost`, `itemDiscount`, `billDiscount`, `tax`, `serviceCharge`, `tip`, `otherFees`, `total`; summary totals and `receiptDifference`.
 
-- [ ] Write a failing test with two people, a `$20` discount on only Khang's `$100` item, a `$18` bill discount, `$18` tax, `$20` service charge, `$10` tip, `$2` other fees, and `$194` receipt total.
-- [ ] Run `npm test -- --run src/features/split-bill/splitBillCalculator.test.ts`; confirm failure.
-- [ ] Implement: item discount reduces only that item's consumers; bill discount/tax are proportional after item discounts (equal if no item cost); service/tip/other fees are equal; total is `subtotal - item discounts - bill discount + tax + service + tip + other fees`; difference is calculated total minus printed total.
-- [ ] Run the calculator test; confirm pass.
+- [x] Write a failing test with two people, a `$20` discount on only Khang's `$100` item, a `$18` bill discount, `$18` tax, `$20` service charge, `$10` tip, `$2` other fees, and the correctly calculated `$212` receipt total.
+- [x] Run `npm test -- --run src/features/split-bill/splitBillCalculator.test.ts`; confirm failure.
+- [x] Implement: item discount reduces only that item's consumers; bill discount/tax are proportional after item discounts (equal if no item cost); service/tip/other fees are equal; total is `subtotal - item discounts - bill discount + tax + service + tip + other fees`; difference is calculated total minus printed total.
+- [x] Run the calculator test; confirm pass.
 - [ ] Commit: `feat: allocate receipt adjustments fairly`.
 
 ### Task 4: Add editable receipt-breakdown UI and history
@@ -113,10 +113,10 @@ interface OcrScanResult {
 - Modify: `frontend/src/features/split-bill/BillHistory.tsx`
 - Test: `frontend/src/features/split-bill/SplitScreen.serviceCharge.test.tsx`
 
-- [ ] Write a failing interaction test: scan result fills Tax `$7`, Service charge `$36`, and receipt total `$234`; debt row labels all non-zero adjustments; matching total shows `Matches receipt`.
-- [ ] Run `npm test -- --run src/features/split-bill/SplitScreen.serviceCharge.test.tsx`; confirm failure.
-- [ ] Add editable amount fields for Tax, Service charge, Tip/gratuity, Bill discount, Other fees, and selected-item discount. Convert every displayed amount using `toStoredSplitBillAmount`; persist every adjustment in `SavedBill`; display every non-zero adjustment in history and debt rows.
-- [ ] Run focused UI/calculator tests, `npm run typecheck`, and `npm run build`; confirm pass.
+- [x] Write a failing interaction test: scan result fills Tax `$7`, Service charge `$36`, and receipt total `$234`; debt row labels all non-zero adjustments; matching total shows `Matches receipt`.
+- [x] Run `npm test -- --run src/features/split-bill/AssignBill.receiptBreakdown.test.tsx`; confirm it initially fails on missing accessible adjustment labels.
+- [x] Add editable amount fields for Tax, Service charge, Tip/gratuity, Bill discount, Other fees, and selected-item discount. Convert every displayed amount using `toStoredSplitBillAmount`; persist every adjustment in `SavedBill`; display every non-zero adjustment in history and debt rows.
+- [x] Run focused UI/calculator tests, `npm run typecheck`, and `npm run build`.
 - [ ] Commit: `feat: add editable receipt breakdown`.
 
 ### Task 5: Verify the receipt flow

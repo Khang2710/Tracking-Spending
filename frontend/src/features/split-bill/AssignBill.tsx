@@ -7,6 +7,7 @@ interface SplitItem {
   id: number;
   name: string;
   price: number;
+  discount: number;
   consumers: string[];
 }
 
@@ -14,8 +15,8 @@ import { FriendBalanceItem, SavedBill } from "./SplitScreen";
 import { Transaction } from "../../App";
 import { useCurrency } from "../../context/CurrencyContext";
 import { OcrScannerCard } from "./OcrScannerCard";
-import { OcrParsedItem } from "../../services/ocrService";
-import { toDisplayedSplitBillAmount, toStoredSplitBillAmount } from "./splitBillAmounts";
+import { OcrScanResult } from "../../services/ocrService";
+import { toDisplayedSplitBillAmount, toStoredOcrScanResult, toStoredSplitBillAmount } from "./splitBillAmounts";
 import { calculateSplitBill } from "./splitBillCalculator";
 
 interface AssignBillProps {
@@ -43,8 +44,12 @@ export default function AssignBill({
   const { formatCurrency, currency } = useCurrency();
   const [items, setItems] = useState<SplitItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-  const [taxPercent, setTaxPercent] = useState<number>(0);
+  const [tax, setTax] = useState<number>(0);
+  const [serviceCharge, setServiceCharge] = useState<number>(0);
   const [tip, setTip] = useState<number>(0);
+  const [billDiscount, setBillDiscount] = useState<number>(0);
+  const [otherFees, setOtherFees] = useState<number>(0);
+  const [receiptTotal, setReceiptTotal] = useState<number | null>(null);
 
   const [newFriendName, setNewFriendName] = useState("");
   const [newItemName, setNewItemName] = useState("");
@@ -55,15 +60,23 @@ export default function AssignBill({
   const [payer, setPayer] = useState("");
   const activePayer = payer || myName;
 
-  const handleItemsParsed = (parsedItems: OcrParsedItem[]) => {
+  const handleItemsParsed = (parsedResult: OcrScanResult) => {
+    const parsedResultInStorage = toStoredOcrScanResult(parsedResult, currency);
     let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-    const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
+    const newSplitItems: SplitItem[] = parsedResultInStorage.items.map((item) => ({
       id: nextId++,
       name: item.name,
-      price: toStoredSplitBillAmount(item.price, currency),
+      price: item.price,
+      discount: 0,
       consumers: [],
     }));
     setItems((prev) => [...prev, ...newSplitItems]);
+    setTax(parsedResultInStorage.tax);
+    setServiceCharge(parsedResultInStorage.serviceCharge);
+    setTip(parsedResultInStorage.tip);
+    setBillDiscount(parsedResultInStorage.billDiscount);
+    setOtherFees(parsedResultInStorage.otherFees);
+    setReceiptTotal(parsedResultInStorage.receiptTotal);
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -75,7 +88,7 @@ export default function AssignBill({
     const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
     setItems((prev) => [
       ...prev,
-      { id: nextId, name: newItemName.trim(), price: toStoredSplitBillAmount(price, currency), consumers: [] },
+      { id: nextId, name: newItemName.trim(), price: toStoredSplitBillAmount(price, currency), discount: 0, consumers: [] },
     ]);
     setNewItemName("");
     setNewItemPrice("");
@@ -120,14 +133,24 @@ export default function AssignBill({
     );
   };
 
-  const { debts, subtotal, totalTax, grandTotal } = useMemo(() => {
+  const handleItemDiscountChange = (id: number, displayedDiscount: number) => {
+    setItems((prev) => prev.map((item) => item.id === id
+      ? { ...item, discount: Math.min(item.price, toStoredSplitBillAmount(Math.max(displayedDiscount, 0), currency)) }
+      : item));
+  };
+
+  const { debts, subtotal, itemDiscountTotal, totalTax, grandTotal, receiptDifference } = useMemo(() => {
     return calculateSplitBill({
       participants: [myName, ...friends],
       items,
-      taxPercent,
+      tax,
+      serviceCharge,
       tip,
+      billDiscount,
+      otherFees,
+      receiptTotal,
     });
-  }, [items, friends, myName, taxPercent, tip]);
+  }, [items, friends, myName, tax, serviceCharge, tip, billDiscount, otherFees, receiptTotal]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -212,8 +235,12 @@ export default function AssignBill({
       payer: activePayer,
       items: items.map((i) => ({ ...i })),
       debts: debts.map((d) => ({ name: d.name, total: d.total })),
-      taxPercent,
+      tax,
+      serviceCharge,
       tip,
+      billDiscount,
+      otherFees,
+      receiptTotal,
     };
 
     setBills((prev) => [newBill, ...prev]);
@@ -233,8 +260,12 @@ export default function AssignBill({
       setShowSuccessToast(false);
       setItems([]);
       setSelectedItemId(null);
-      setTaxPercent(0);
+      setTax(0);
+      setServiceCharge(0);
       setTip(0);
+      setBillDiscount(0);
+      setOtherFees(0);
+      setReceiptTotal(null);
       setBillTitle("");
     }, 2500);
   };
@@ -302,6 +333,9 @@ export default function AssignBill({
                           <p className="text-sm font-semibold text-[var(--paper-ink)] truncate">{item.name}</p>
                           <p className="text-xs text-tm font-mono mt-0.5">
                             {formatCurrency(item.price)}
+                            {item.discount > 0 && (
+                              <span className="ml-2 text-green font-semibold">−{formatCurrency(item.discount)}</span>
+                            )}
                             {hasConsumers && (
                               <span className="ml-2 text-tm/80">
                                 ({formatCurrency(item.price / item.consumers.length)} / {t("split.person") || "người"})
@@ -310,6 +344,25 @@ export default function AssignBill({
                           </p>
                         </div>
                       </div>
+
+                      {isSelected && (
+                        <div className="flex items-center gap-2 md:w-40 shrink-0" onClick={(event) => event.stopPropagation()}>
+                          <label htmlFor={`item-discount-${item.id}`} className="text-[10px] text-tm font-semibold whitespace-nowrap">
+                            Discount
+                          </label>
+                          <input
+                            id={`item-discount-${item.id}`}
+                            type="number"
+                            min="0"
+                            max={toDisplayedSplitBillAmount(item.price, currency)}
+                            placeholder="0"
+                            value={item.discount ? toDisplayedSplitBillAmount(item.discount, currency) : ""}
+                            onChange={(event) => handleItemDiscountChange(item.id, parseFloat(event.target.value) || 0)}
+                            className="w-full min-w-0 px-2.5 py-1.5 rounded-lg border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
+                            style={{ borderColor: C.border }}
+                          />
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
                         {/* Consumer badges (Only show when specific consumers are selected) */}
@@ -479,34 +532,30 @@ export default function AssignBill({
               </select>
             </div>
 
-            {/* Tax & Tip Row */}
+            {/* Receipt adjustments: OCR fills these when present; every field stays editable. */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
-                  {t("split.tax")}
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={taxPercent || ""}
-                  onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
-                  {t("split.tip", { symbol: currency === "VND" ? "đ" : "$" })}
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={tip ? toDisplayedSplitBillAmount(tip, currency) : ""}
-                  onChange={(e) => setTip(toStoredSplitBillAmount(parseFloat(e.target.value) || 0, currency))}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
+              {[
+                { label: "Tax", value: tax, setValue: setTax },
+                { label: "Service charge", value: serviceCharge, setValue: setServiceCharge },
+                { label: "Tip / gratuity", value: tip, setValue: setTip },
+                { label: "Bill discount", value: billDiscount, setValue: setBillDiscount },
+                { label: "Other fees", value: otherFees, setValue: setOtherFees },
+                { label: "Receipt total", value: receiptTotal ?? 0, setValue: (value: number) => setReceiptTotal(value || null) },
+              ].map(({ label, value, setValue }) => (
+                <div key={label}>
+                  <label htmlFor={`receipt-adjustment-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`} className="text-xs text-tm mb-1.5 block font-semibold">{label}</label>
+                  <input
+                    id={`receipt-adjustment-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={value ? toDisplayedSplitBillAmount(value, currency) : ""}
+                    onChange={(event) => setValue(toStoredSplitBillAmount(parseFloat(event.target.value) || 0, currency))}
+                    className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
+                    style={{ borderColor: C.border }}
+                  />
+                </div>
+              ))}
             </div>
 
             {/* Debts Distribution List */}
@@ -520,8 +569,14 @@ export default function AssignBill({
                   <div key={d.name} className="flex justify-between items-center text-xs p-2.5 rounded-xl" style={{ background: C.surf + "30" }}>
                     <div className="flex flex-col">
                       <span className="text-[var(--paper-ink)] font-semibold">{d.name}</span>
-                      <span className="text-[10px] text-tm mt-0.5">
-                        {t("split.dishCost") || "Món"}: {formatCurrency(d.itemCost)} + {t("split.taxLabel") || "Thuế"}: {formatCurrency(d.tax)}
+                      <span className="text-[10px] text-tm mt-0.5 leading-relaxed">
+                        Item {formatCurrency(d.itemCost)}
+                        {d.itemDiscount > 0 && ` − item discount ${formatCurrency(d.itemDiscount)}`}
+                        {d.billDiscount > 0 && ` − bill discount ${formatCurrency(d.billDiscount)}`}
+                        {d.tax > 0 && ` + tax ${formatCurrency(d.tax)}`}
+                        {d.serviceCharge > 0 && ` + service charge ${formatCurrency(d.serviceCharge)}`}
+                        {d.tip > 0 && ` + tip ${formatCurrency(d.tip)}`}
+                        {d.otherFees > 0 && ` + other fees ${formatCurrency(d.otherFees)}`}
                       </span>
                     </div>
                     <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(d.total)}</span>
@@ -536,14 +591,13 @@ export default function AssignBill({
                 <span>{t("split.itemsSubtotal")}:</span>
                 <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-tm">
-                <span>{t("split.taxLabel")} ({taxPercent}%):</span>
-                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(totalTax)}</span>
-              </div>
-              <div className="flex justify-between text-tm">
-                <span>{t("split.flatTip")}:</span>
-                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(tip)}</span>
-              </div>
+              {itemDiscountTotal > 0 && <div className="flex justify-between text-green"><span>Item discounts:</span><span className="font-mono font-bold">−{formatCurrency(itemDiscountTotal)}</span></div>}
+              {billDiscount > 0 && <div className="flex justify-between text-green"><span>Bill discount:</span><span className="font-mono font-bold">−{formatCurrency(billDiscount)}</span></div>}
+              {totalTax > 0 && <div className="flex justify-between text-tm"><span>Tax:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(totalTax)}</span></div>}
+              {serviceCharge > 0 && <div className="flex justify-between text-tm"><span>Service charge:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(serviceCharge)}</span></div>}
+              {tip > 0 && <div className="flex justify-between text-tm"><span>Tip / gratuity:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(tip)}</span></div>}
+              {otherFees > 0 && <div className="flex justify-between text-tm"><span>Other fees:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(otherFees)}</span></div>}
+              {receiptTotal !== null && <div className={`flex justify-between ${receiptDifference === 0 ? "text-green" : "text-red"}`}><span>{receiptDifference === 0 ? "Matches receipt" : "Receipt difference"}:</span><span className="font-mono font-bold">{receiptDifference === 0 ? formatCurrency(receiptTotal) : formatCurrency(Math.abs(receiptDifference ?? 0))}</span></div>}
 
               <div className="flex justify-between text-sm font-bold text-[var(--paper-ink)] pt-2.5 border-t items-center" style={{ borderColor: C.border }}>
                 <span className="flex items-center gap-1">

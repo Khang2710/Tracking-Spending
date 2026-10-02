@@ -7,7 +7,12 @@ export interface OcrParsedItem {
 
 export interface OcrScanResult {
   items: OcrParsedItem[];
+  tax: number;
   serviceCharge: number;
+  tip: number;
+  billDiscount: number;
+  otherFees: number;
+  receiptTotal: number | null;
 }
 
 export interface ProcessReceiptOptions {
@@ -57,7 +62,7 @@ export async function processReceiptOcr({
     );
     if (typeof data !== "object" || data === null || !("items" in data) || !Array.isArray(data.items)) {
       onProgress?.(100, "Finished");
-      return { items: [], serviceCharge: 0 };
+      return emptyOcrScanResult();
     }
 
     const items = data.items.filter(
@@ -68,16 +73,32 @@ export async function processReceiptOcr({
         typeof (item as OcrParsedItem).price === "number",
     );
 
-    const serviceCharge = "serviceCharge" in data &&
-      typeof data.serviceCharge === "number" &&
-      Number.isFinite(data.serviceCharge) && data.serviceCharge >= 0
-      ? data.serviceCharge
-      : 0;
-
     onProgress?.(100, items.length > 0 ? "Success" : "Finished");
-    return { items, serviceCharge };
+    return {
+      items,
+      tax: readAmount(data, "tax"),
+      serviceCharge: readAmount(data, "serviceCharge"),
+      tip: readAmount(data, "tip"),
+      billDiscount: readAmount(data, "billDiscount"),
+      otherFees: readAmount(data, "otherFees"),
+      receiptTotal: readNullableAmount(data, "receiptTotal"),
+    };
   } catch (error) {
     onProgress?.(100, "Finished");
     throw error;
   }
+}
+
+function emptyOcrScanResult(): OcrScanResult {
+  return { items: [], tax: 0, serviceCharge: 0, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null };
+}
+
+function readAmount(data: Record<string, unknown>, key: string): number {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function readNullableAmount(data: Record<string, unknown>, key: string): number | null {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
