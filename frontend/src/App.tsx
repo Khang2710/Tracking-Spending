@@ -2953,6 +2953,7 @@ export default function App() {
         open={isTxModalOpen}
         onOpenChange={setIsTxModalOpen}
         title={t("dashboard.newTransaction")}
+        closeLabel={t("common.close")}
         description={i18n.language?.startsWith("vi") ? "Thêm khoản chi hoặc thu nhập" : "Add an expense or income transaction"}
         footer={(
           <button

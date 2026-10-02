@@ -31,6 +31,7 @@ class FakeVisualViewport extends EventTarget {
 const props = {
   title: "New Transaction",
   description: "Add transaction",
+  closeLabel: "Close",
   onOpenChange: vi.fn(),
 };
 
@@ -68,6 +69,33 @@ describe("MobileFormSheet", () => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     document.body.style.overflow = originalOverflow;
+  });
+
+  it.each(["Close", "Đóng"])("offers a visible %s action that closes without submitting", (closeLabel) => {
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <MobileFormSheet
+          {...props}
+          open={open}
+          closeLabel={closeLabel}
+          onOpenChange={(nextOpen) => { onOpenChange(nextOpen); setOpen(nextOpen); }}
+          footer={<button type="submit" form="test-form">Save transaction</button>}
+        >
+          <form id="test-form" onSubmit={onSubmit}><input aria-label="Description" /></form>
+        </MobileFormSheet>
+      );
+    }
+    render(<Harness />);
+    const close = screen.getByRole("button", { name: closeLabel });
+    expect(close).toBeVisible();
+    fireEvent.click(close);
+
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("tracks the keyboard-covered visual viewport and cleans up on close", () => {

@@ -5,6 +5,7 @@ export type MobileFormSheetProps = {
   open: boolean;
   title: string;
   description: string;
+  closeLabel: string;
   onOpenChange(open: boolean): void;
   footer?: ReactNode;
   children: ReactNode;
@@ -20,7 +21,7 @@ function getViewportGeometry(): { keyboardOffset: number; availableHeight: numbe
   };
 }
 
-export function MobileFormSheet({ open, title, description, onOpenChange, footer, children }: MobileFormSheetProps): ReactElement | null {
+export function MobileFormSheet({ open, title, description, closeLabel, onOpenChange, footer, children }: MobileFormSheetProps): ReactElement | null {
   const [{ keyboardOffset, availableHeight }, setViewportGeometry] = useState(getViewportGeometry);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
@@ -128,7 +129,16 @@ export function MobileFormSheet({ open, title, description, onOpenChange, footer
         >
           <header className="shrink-0 px-5 pb-4 pt-3">
             <Drawer.Handle className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--paper-border)]" />
-            <Drawer.Title className="text-[21px] font-extrabold tracking-[-0.03em]">{title}</Drawer.Title>
+            <div className="flex items-center justify-between gap-3">
+              <Drawer.Title className="text-[21px] font-extrabold tracking-[-0.03em]">{title}</Drawer.Title>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="min-h-11 shrink-0 cursor-pointer rounded-lg px-3 text-sm font-semibold text-[var(--paper-muted)] hover:text-[var(--paper-ink)]"
+              >
+                {closeLabel}
+              </button>
+            </div>
             <Drawer.Description className="mt-1 text-sm text-[var(--paper-muted)]">{description}</Drawer.Description>
           </header>
           <div

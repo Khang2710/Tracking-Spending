@@ -25,6 +25,7 @@ async function renderForm() {
           open
           onOpenChange={vi.fn()}
           title="New Transaction"
+          closeLabel="Close"
           description="Add an expense or income"
           footer={<button type="submit" form={NEW_TRANSACTION_FORM_ID}>Save Transaction</button>}
         >
