@@ -14,13 +14,13 @@ The calculations panel will contain an editable `Service charge` monetary input 
 
 ## Calculation
 
-The grand total is `items subtotal + tax + service charge + tip`.
+The grand total is `items subtotal + tax + service charge + tip`. Tax and tip keep their existing user-entered behavior; this change only detects and fills service charge.
 
 The service charge and tip are each split equally among all participants. Tax remains proportional to each participant's item subtotal. The debt distribution details show separate lines for item cost, tax, service charge, and tip when their values are non-zero.
 
 ## Acceptance example
 
-For the supplied USD receipt: item subtotal `$191`, service charge `$36`, tax `$7`, and tip `$0` produce a total of `$234`. With one participant, that person owes `$234`; with multiple participants, the `$36` service charge is split equally.
+For the supplied USD receipt: item subtotal `$191`, scanned service charge `$36`, user-entered tax `$7`, and tip `$0` produce a total of `$234`. With one participant, that person owes `$234`; with multiple participants, the `$36` service charge is split equally.
 
 ## Error handling and tests
 
