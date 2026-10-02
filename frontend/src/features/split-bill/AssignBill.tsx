@@ -15,6 +15,8 @@ import { Transaction } from "../../App";
 import { useCurrency } from "../../context/CurrencyContext";
 import { OcrScannerCard } from "./OcrScannerCard";
 import { OcrParsedItem } from "../../services/ocrService";
+import { toDisplayedSplitBillAmount, toStoredSplitBillAmount } from "./splitBillAmounts";
+import { calculateSplitBill } from "./splitBillCalculator";
 
 interface AssignBillProps {
   friends: string[];
@@ -58,7 +60,7 @@ export default function AssignBill({
     const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
       id: nextId++,
       name: item.name,
-      price: item.price,
+      price: toStoredSplitBillAmount(item.price, currency),
       consumers: [],
     }));
     setItems((prev) => [...prev, ...newSplitItems]);
@@ -73,7 +75,7 @@ export default function AssignBill({
     const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
     setItems((prev) => [
       ...prev,
-      { id: nextId, name: newItemName.trim(), price, consumers: [] },
+      { id: nextId, name: newItemName.trim(), price: toStoredSplitBillAmount(price, currency), consumers: [] },
     ]);
     setNewItemName("");
     setNewItemPrice("");
@@ -119,52 +121,12 @@ export default function AssignBill({
   };
 
   const { debts, subtotal, totalTax, grandTotal } = useMemo(() => {
-    const allParticipants = [myName, ...friends];
-    const numPeople = allParticipants.length;
-    const itemShares: Record<string, number> = {};
-    allParticipants.forEach((p) => {
-      itemShares[p] = 0;
+    return calculateSplitBill({
+      participants: [myName, ...friends],
+      items,
+      taxPercent,
+      tip,
     });
-
-    const unassignedItems = items.filter((item) => item.consumers.length === 0);
-    const totalSharedAmount = unassignedItems.reduce((sum, item) => sum + item.price, 0);
-    const sharedAmountPerPerson = numPeople > 0 ? totalSharedAmount / numPeople : 0;
-
-    items.forEach((item) => {
-      if (item.consumers.length > 0) {
-        const pricePerPerson = item.price / item.consumers.length;
-        item.consumers.forEach((c) => {
-          if (itemShares[c] !== undefined) {
-            itemShares[c] += pricePerPerson;
-          }
-        });
-      }
-    });
-
-    const tipShare = numPeople > 0 ? tip / numPeople : 0;
-    const calculatedDebts = allParticipants.map((p) => {
-      const assignedItemCost = itemShares[p] || 0;
-      const personalItemCost = assignedItemCost + sharedAmountPerPerson;
-      const personalTax = personalItemCost * (taxPercent / 100);
-      const totalDue = personalItemCost + personalTax + tipShare;
-      return {
-        name: p,
-        itemCost: personalItemCost,
-        tax: personalTax,
-        total: Math.round(totalDue * 100) / 100,
-      };
-    });
-
-    const calculatedSubtotal = items.reduce((sum, i) => sum + i.price, 0);
-    const calculatedTotalTax = calculatedSubtotal * (taxPercent / 100);
-    const calculatedGrandTotal = calculatedSubtotal + calculatedTotalTax + tip;
-
-    return {
-      debts: calculatedDebts,
-      subtotal: calculatedSubtotal,
-      totalTax: calculatedTotalTax,
-      grandTotal: calculatedGrandTotal,
-    };
   }, [items, friends, myName, taxPercent, tip]);
 
   const getInitials = (name: string) => {
@@ -539,8 +501,8 @@ export default function AssignBill({
                 <input
                   type="number"
                   placeholder="0"
-                  value={tip || ""}
-                  onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
+                  value={tip ? toDisplayedSplitBillAmount(tip, currency) : ""}
+                  onChange={(e) => setTip(toStoredSplitBillAmount(parseFloat(e.target.value) || 0, currency))}
                   className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                   style={{ borderColor: C.border }}
                 />
