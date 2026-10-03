@@ -26,6 +26,7 @@ export const transactionSchema = z.object({
   occurredOn: dateSchema,
   amount: z.number().finite().min(-1_000_000_000).max(1_000_000_000).refine((value) => value !== 0),
   category: z.string().trim().min(1).max(80),
+  note: z.string().trim().max(500).nullable().optional().transform((note) => note || null),
 }).strict();
 
 export const budgetSchema = z.object({
@@ -43,5 +44,5 @@ export const savingsGoalSchema = z.object({
 }).strict();
 
 export type WalletInput = z.infer<typeof walletSchema>;
-export type TransactionInput = z.infer<typeof transactionSchema>;
+export type TransactionInput = z.input<typeof transactionSchema>;
 export type SavingsGoalInput = z.infer<typeof savingsGoalSchema>;

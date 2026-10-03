@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiRequestMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/apiClient", () => ({ apiRequest: apiRequestMock }));
 
 import { createCloudSavingsGoal, createCloudTransaction, createCloudWallet, deleteCloudTransaction, mapCloudFinance, monthStartInLocalTime, updateCloudTransaction } from "./finance.repository";
+
+beforeEach(() => apiRequestMock.mockReset());
 
 describe("mapCloudFinance", () => {
   it("maps UUID-backed cloud rows to the numeric IDs used by the current UI", () => {
@@ -20,6 +22,7 @@ describe("mapCloudFinance", () => {
           occurred_on: "2026-09-30",
           amount: "-35000",
           category: "Drinks",
+          note: "Shared birthday dinner",
         },
       ],
       savingsGoals: [],
@@ -37,10 +40,21 @@ describe("mapCloudFinance", () => {
         date: "2026-09-30",
         amount: -35000,
         category: "Drinks",
+        note: "Shared birthday dinner",
       },
     ]);
     expect(data.walletCloudIds.get(1)).toBe("wallet-a");
     expect(data.transactionCloudIds.get(1)).toBe("transaction-a");
+  });
+
+  it.each([undefined, null, "", " \t\n "])("maps legacy or blank cloud notes to null (%j)", (note) => {
+    const data = mapCloudFinance({
+      wallets: [{ id: "wallet-a", label: "Cash", balance: 10, accent: "#111" }],
+      transactions: [{ id: "transaction-a", wallet_id: "wallet-a", name: "Dinner", occurred_on: "2026-09-30", amount: -10, category: "Food", note }],
+      savingsGoals: [],
+      budget: null,
+    });
+    expect(data.transactions[0]?.note).toBeNull();
   });
 });
 
@@ -94,6 +108,7 @@ describe("createCloudTransaction", () => {
       date: "2026-09-30",
       amount: -35000,
       category: "Drinks",
+      note: "Shared birthday dinner",
     }, "wallet-a")).resolves.toBe("transaction-a");
 
     expect(apiRequestMock).toHaveBeenCalledWith("/api/finance/transactions", {
@@ -104,6 +119,7 @@ describe("createCloudTransaction", () => {
         occurredOn: "2026-09-30",
         amount: -35000,
         category: "Drinks",
+        note: "Shared birthday dinner",
       }),
     });
   });
@@ -117,6 +133,7 @@ describe("transaction mutation RPCs", () => {
     date: "2026-09-30",
     amount: -35000,
     category: "Drinks",
+    note: "Shared birthday dinner",
   };
 
   it("updates a transaction through the backend", async () => {
@@ -132,6 +149,7 @@ describe("transaction mutation RPCs", () => {
         occurredOn: "2026-09-30",
         amount: -35000,
         category: "Drinks",
+        note: "Shared birthday dinner",
       }),
     });
   });
@@ -144,5 +162,23 @@ describe("transaction mutation RPCs", () => {
     expect(apiRequestMock).toHaveBeenCalledWith("/api/finance/transactions/transaction-a", {
       method: "DELETE",
     });
+  });
+});
+
+describe("transaction note payload normalization", () => {
+  it.each([
+    [undefined, null],
+    [null, null],
+    ["", null],
+    [" \t\n ", null],
+    ["  Shared birthday dinner  ", "Shared birthday dinner"],
+  ])("normalizes note %j to %j for create and update", async (note, expected) => {
+    const transaction = { id: 1, walletId: 1, name: "Dinner", date: "2026-09-30", amount: -10, category: "Food", note };
+    apiRequestMock.mockResolvedValueOnce({ id: "transaction-a" }).mockResolvedValueOnce({ ok: true });
+    await createCloudTransaction(transaction, "wallet-a");
+    await updateCloudTransaction("transaction-a", transaction, "wallet-a");
+    for (const [, options] of apiRequestMock.mock.calls) {
+      expect(JSON.parse(options.body)).toMatchObject({ note: expected });
+    }
   });
 });

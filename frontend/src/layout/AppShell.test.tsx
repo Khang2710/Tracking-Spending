@@ -1,6 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createInstance } from "i18next";
+import { useRef, useState } from "react";
+import { I18nextProvider, initReactI18next } from "react-i18next";
 import { describe, expect, it, vi } from "vitest";
+import { MobileFormSheet } from "../components/mobile/MobileFormSheet";
+import { CurrencyProvider } from "../context/CurrencyContext";
+import { NewTransactionForm } from "../features/transactions/NewTransactionForm";
+import en from "../locales/en";
+import viLocale from "../locales/vi";
 import { AppShell } from "./AppShell";
 
 describe("AppShell", () => {
@@ -27,5 +35,42 @@ describe("AppShell", () => {
 
     expect(onAddTransaction).toHaveBeenCalledOnce();
     expect(onNavigate).not.toHaveBeenCalledWith("actions");
+  });
+
+  it.each([
+    { language: "en", actions: "Quick actions", transaction: "New Transaction", close: "Close", description: "Description" },
+    { language: "vi", actions: "Tác vụ nhanh", transaction: "Thêm giao dịch", close: "Đóng", description: "Mô tả / Tên giao dịch" },
+  ])("returns focus to the $language launcher after closing New Transaction", async ({ language, actions, transaction, close, description }) => {
+    const i18n = createInstance();
+    await i18n.use(initReactI18next).init({ lng: language, resources: { en: { translation: en }, vi: { translation: viLocale } } });
+    const onSubmit = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      const returnFocusRef = useRef<HTMLElement | null>(null);
+      return (
+        <>
+          <AppShell
+            active="home"
+            onNavigate={vi.fn()}
+            onAddTransaction={(target?: HTMLElement | null) => { returnFocusRef.current = target ?? null; setOpen(true); }}
+            onScanReceipt={vi.fn()}
+            labels={{ home: "Home", statistics: "Statistics", splitBill: "Split bill", settings: "Settings", actions, addTransaction: transaction, scanReceipt: "Scan receipt", close }}
+          ><p>Home content</p></AppShell>
+          <MobileFormSheet open={open} onOpenChange={setOpen} returnFocusTo={returnFocusRef.current} title={transaction} description="Add transaction" closeLabel={close}>
+            <NewTransactionForm wallets={[]} onSubmit={onSubmit} />
+          </MobileFormSheet>
+        </>
+      );
+    }
+    render(<I18nextProvider i18n={i18n}><CurrencyProvider><Harness /></CurrencyProvider></I18nextProvider>);
+    const user = userEvent.setup();
+    const launcher = screen.getByRole("button", { name: actions });
+    await user.click(launcher);
+    await user.click(screen.getByRole("button", { name: transaction }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: description })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: close }));
+    await waitFor(() => expect(launcher).toHaveFocus());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

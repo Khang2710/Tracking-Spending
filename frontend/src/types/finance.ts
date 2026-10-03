@@ -16,6 +16,7 @@ export interface Transaction {
   amount: number;
   category: string;
   walletId: number;
+  note: string | null;
 }
 
 export interface Wallet {

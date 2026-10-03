@@ -36,7 +36,7 @@ async function loadAllTransactions(supabase: SupabaseClient) {
   for (let from = 0; from < 100_000; from += pageSize) {
     const result = await supabase
       .from("tracker_transactions")
-      .select("id,wallet_id,name,occurred_on,amount,category")
+      .select("id,wallet_id,name,occurred_on,amount,category,note")
       .order("occurred_on", { ascending: false })
       .range(from, from + pageSize - 1);
     const page = unwrap(result) ?? [];
@@ -92,6 +92,7 @@ export function createFinanceService(
         p_occurred_on: input.occurredOn,
         p_amount: input.amount,
         p_category: input.category,
+        p_note: input.note?.trim() || null,
       });
       return unwrap(result) as string;
     },
@@ -103,6 +104,7 @@ export function createFinanceService(
         p_occurred_on: input.occurredOn,
         p_amount: input.amount,
         p_category: input.category,
+        p_note: input.note?.trim() || null,
       }));
     },
     async deleteTransaction(accessToken, id) {

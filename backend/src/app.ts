@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import { isIP } from "node:net";
 import { createAuthenticateMiddleware, type VerifyAccessToken } from "./middleware/authenticate.js";
 import {
   NoOcrProviderError,
@@ -18,8 +19,26 @@ export interface AppDependencies {
   extractReceipt(payload: OcrPayload): Promise<ReceiptScanResult>;
   verifyAccessToken: VerifyAccessToken;
   frontendOrigins?: string[];
+  nodeEnv?: "development" | "test" | "production";
+  allowPrivateLanOrigins?: boolean;
   finance?: FinanceService;
   ocrLimit?: { maxRequests: number; windowMs: number };
+}
+
+function isDevelopmentViteOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.origin !== origin || url.protocol !== "http:" || url.port !== "5173") return false;
+    if (url.hostname === "localhost") return true;
+    if (isIP(url.hostname) !== 4) return false;
+
+    const [first, second = -1] = url.hostname.split(".").map(Number);
+    return first === 127 || first === 10
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168);
+  } catch {
+    return false;
+  }
 }
 
 function createOcrRateLimiter(options: { maxRequests: number; windowMs: number }) {
@@ -55,7 +74,11 @@ export function createApp(dependencies: AppDependencies): Express {
   app.disable("x-powered-by");
   app.use(cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      if (!origin || allowedOrigins.has(origin)
+        || (dependencies.nodeEnv === "development" && dependencies.allowPrivateLanOrigins === true
+          && isDevelopmentViteOrigin(origin))) {
+        return callback(null, true);
+      }
       return callback(new Error("Origin not allowed"));
     },
   }));
