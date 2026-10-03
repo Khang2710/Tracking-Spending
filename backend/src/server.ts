@@ -12,6 +12,7 @@ const app = createApp({
   extractReceipt: receiptOcr.extract,
   verifyAccessToken: createTokenVerifier(config),
   frontendOrigins: config.frontendOrigins,
+  nodeEnv: config.nodeEnv,
   finance: createFinanceService(config),
 });
 
