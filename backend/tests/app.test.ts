@@ -17,6 +17,7 @@ describe("backend API", () => {
 
   it.each([
     { name: "NODE_ENV and LAN flag absent", env: {} },
+    { name: "NODE_ENV absent with the LAN flag enabled", env: { ALLOW_PRIVATE_LAN_ORIGINS: "true" } },
     { name: "development without a LAN flag", env: { NODE_ENV: "development" } },
     { name: "development with the LAN flag disabled", env: { NODE_ENV: "development", ALLOW_PRIVATE_LAN_ORIGINS: "false" } },
   ])("rejects private LAN origins when $name", async ({ env }) => {

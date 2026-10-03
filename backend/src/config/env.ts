@@ -36,7 +36,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): BackendConfig 
     supabaseUrl: value.SUPABASE_URL,
     supabasePublishableKey: value.SUPABASE_PUBLISHABLE_KEY,
     frontendOrigins: value.FRONTEND_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
-    allowPrivateLanOrigins: value.ALLOW_PRIVATE_LAN_ORIGINS === "true",
+    allowPrivateLanOrigins: source.NODE_ENV === "development" && value.ALLOW_PRIVATE_LAN_ORIGINS === "true",
     groqApiKey: cleanOptionalSecret(value.GROQ_API_KEY),
     openRouterApiKey: cleanOptionalSecret(value.OPENROUTER_API_KEY),
   };
