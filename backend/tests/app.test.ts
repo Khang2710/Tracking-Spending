@@ -1,6 +1,7 @@
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
+import { loadEnv } from "../src/config/env.js";
 import { createReceiptOcrService, NoOcrProviderError, OcrProviderError } from "../src/modules/receipt-ocr/ocr.service.js";
 
 describe("backend API", () => {
@@ -12,6 +13,54 @@ describe("backend API", () => {
     const app = createApp({ extractReceipt: vi.fn(), ...authenticated });
 
     await request(app).get("/api/health").expect(200, { status: "ok" });
+  });
+
+  it.each([
+    { name: "NODE_ENV and LAN flag absent", env: {} },
+    { name: "development without a LAN flag", env: { NODE_ENV: "development" } },
+    { name: "development with the LAN flag disabled", env: { NODE_ENV: "development", ALLOW_PRIVATE_LAN_ORIGINS: "false" } },
+  ])("rejects private LAN origins when $name", async ({ env }) => {
+    const config = loadEnv({
+      SUPABASE_URL: "https://supabase.example",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+      ...env,
+    });
+    const app = createApp({ ...config, extractReceipt: vi.fn(), ...authenticated });
+
+    const response = await request(app)
+      .get("/api/health").set("Origin", "http://192.168.1.42:5173").expect(500);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("allows private LAN origins when development explicitly opts in through configuration", async () => {
+    const config = loadEnv({
+      NODE_ENV: "development",
+      ALLOW_PRIVATE_LAN_ORIGINS: "true",
+      SUPABASE_URL: "https://supabase.example",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+    });
+    const app = createApp({ ...config, extractReceipt: vi.fn(), ...authenticated });
+
+    const response = await request(app)
+      .get("/api/health").set("Origin", "http://192.168.1.42:5173").expect(200);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://192.168.1.42:5173");
+  });
+
+  it.each(["production", "test"])("rejects private LAN origins in configured %s even with LAN opt-in", async (nodeEnv) => {
+    const config = loadEnv({
+      NODE_ENV: nodeEnv,
+      ALLOW_PRIVATE_LAN_ORIGINS: "true",
+      SUPABASE_URL: "https://supabase.example",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+    });
+    const app = createApp({ ...config, extractReceipt: vi.fn(), ...authenticated });
+
+    const response = await request(app)
+      .get("/api/health").set("Origin", "http://192.168.1.42:5173").expect(500);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it.each([
@@ -28,6 +77,7 @@ describe("backend API", () => {
       extractReceipt: vi.fn(),
       ...authenticated,
       nodeEnv: "development",
+      allowPrivateLanOrigins: true,
       frontendOrigins: ["https://wealthy.example"],
     });
 
@@ -37,7 +87,7 @@ describe("backend API", () => {
   });
 
   it("allows a development LAN preflight for authenticated API requests", async () => {
-    const app = createApp({ extractReceipt: vi.fn(), ...authenticated, nodeEnv: "development" });
+    const app = createApp({ extractReceipt: vi.fn(), ...authenticated, nodeEnv: "development", allowPrivateLanOrigins: true });
 
     const response = await request(app)
       .options("/api/ocr")
@@ -67,7 +117,7 @@ describe("backend API", () => {
     "http://192.168.999.1:5173",
     "null",
   ])("rejects untrusted development origin %s", async (origin) => {
-    const app = createApp({ extractReceipt: vi.fn(), ...authenticated, nodeEnv: "development" });
+    const app = createApp({ extractReceipt: vi.fn(), ...authenticated, nodeEnv: "development", allowPrivateLanOrigins: true });
 
     const response = await request(app).get("/api/health").set("Origin", origin).expect(500);
 
@@ -81,6 +131,7 @@ describe("backend API", () => {
         extractReceipt: vi.fn(),
         ...authenticated,
         nodeEnv,
+        allowPrivateLanOrigins: true,
         frontendOrigins: ["https://wealthy.example"],
       });
 

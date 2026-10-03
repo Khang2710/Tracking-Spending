@@ -13,6 +13,7 @@ const app = createApp({
   verifyAccessToken: createTokenVerifier(config),
   frontendOrigins: config.frontendOrigins,
   nodeEnv: config.nodeEnv,
+  allowPrivateLanOrigins: config.allowPrivateLanOrigins,
   finance: createFinanceService(config),
 });
 

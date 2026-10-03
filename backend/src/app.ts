@@ -20,6 +20,7 @@ export interface AppDependencies {
   verifyAccessToken: VerifyAccessToken;
   frontendOrigins?: string[];
   nodeEnv?: "development" | "test" | "production";
+  allowPrivateLanOrigins?: boolean;
   finance?: FinanceService;
   ocrLimit?: { maxRequests: number; windowMs: number };
 }
@@ -74,7 +75,8 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)
-        || (dependencies.nodeEnv === "development" && isDevelopmentViteOrigin(origin))) {
+        || (dependencies.nodeEnv === "development" && dependencies.allowPrivateLanOrigins === true
+          && isDevelopmentViteOrigin(origin))) {
         return callback(null, true);
       }
       return callback(new Error("Origin not allowed"));

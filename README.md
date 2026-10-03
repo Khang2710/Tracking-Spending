@@ -85,7 +85,7 @@ Connect the Mac and iPhone to the same trusted private Wi-Fi. Use the environmen
 From the repository root, start the backend in one terminal:
 
 ```bash
-NODE_ENV=development npm run dev:backend
+npm --prefix backend run dev:lan
 ```
 
 Start the LAN frontend in another terminal:
@@ -96,7 +96,7 @@ npm --prefix frontend run dev:lan
 
 The LAN command binds Vite to `0.0.0.0` and requires port `5173`; if that port is occupied, stop the existing frontend process first. Find the Mac's Wi-Fi IPv4 address in **System Settings → Wi-Fi → Details → TCP/IP**. In Safari on the iPhone, open `http://<Mac-LAN-IP>:5173` with that address substituted. `localhost` on the iPhone refers to the iPhone itself, so it cannot reach the Mac's app.
 
-In development, backend CORS accepts HTTP origins on port `5173` from `localhost`, loopback IPv4 (`127.0.0.0/8`), and private IPv4 ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). Production and test modes accept only the configured `FRONTEND_ORIGINS` allowlist. You do not need to commit a LAN IP or change the production allowlist for this workflow.
+The backend LAN command explicitly sets `NODE_ENV=development` and `ALLOW_PRIVATE_LAN_ORIGINS=true`. With this opt-in, backend CORS accepts HTTP origins on port `5173` from `localhost`, loopback IPv4 (`127.0.0.0/8`), and private IPv4 ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). The LAN flag defaults to false, so ordinary startup remains restricted to the configured `FRONTEND_ORIGINS` allowlist, including when `NODE_ENV` is absent. Production and test modes always use the allowlist even if the LAN flag is true. You do not need to commit a LAN IP or change the production allowlist for this workflow.
 
 If Safari cannot connect, allow the Node/Vite process through the Mac firewall for the trusted network and check that the Wi-Fi does not isolate clients. Keep both terminals running during testing and stop them afterward. Do not forward the development port to the internet or use this workflow on public Wi-Fi.
 

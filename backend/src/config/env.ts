@@ -6,6 +6,7 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   FRONTEND_ORIGINS: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
+  ALLOW_PRIVATE_LAN_ORIGINS: z.enum(["true", "false"]).default("false"),
   GROQ_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
 });
@@ -16,6 +17,7 @@ export interface BackendConfig {
   supabaseUrl: string;
   supabasePublishableKey: string;
   frontendOrigins: string[];
+  allowPrivateLanOrigins: boolean;
   groqApiKey?: string;
   openRouterApiKey?: string;
 }
@@ -34,6 +36,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): BackendConfig 
     supabaseUrl: value.SUPABASE_URL,
     supabasePublishableKey: value.SUPABASE_PUBLISHABLE_KEY,
     frontendOrigins: value.FRONTEND_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+    allowPrivateLanOrigins: value.ALLOW_PRIVATE_LAN_ORIGINS === "true",
     groqApiKey: cleanOptionalSecret(value.GROQ_API_KEY),
     openRouterApiKey: cleanOptionalSecret(value.OPENROUTER_API_KEY),
   };
