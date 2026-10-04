@@ -1,13 +1,13 @@
-import { CurrencyType, toDisplayedAmount, toStoredAmount } from "../../context/currencyAmounts";
+import { CurrencyType } from "../../context/currencyAmounts";
 import type { OcrScanResult } from "../../services/ocrService";
 
-/** Split-bill records share the app's VND-based storage model. */
-export function toStoredSplitBillAmount(amount: number, currency: CurrencyType): number {
-  return toStoredAmount(amount, currency);
+/** Split-bill drafts and records are absolute in their explicitly saved currency. */
+export function toStoredSplitBillAmount(amount: number, _currency: CurrencyType): number {
+  return amount;
 }
 
-export function toDisplayedSplitBillAmount(amount: number, currency: CurrencyType): number {
-  return toDisplayedAmount(amount, currency);
+export function toDisplayedSplitBillAmount(amount: number, _currency: CurrencyType): number {
+  return amount;
 }
 
 export function toStoredOcrScanResult(result: OcrScanResult, currency: CurrencyType): OcrScanResult {

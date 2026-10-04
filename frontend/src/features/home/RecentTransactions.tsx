@@ -50,8 +50,8 @@ export function RecentTransactions({
                 </p>
                 <span className="sr-only">{isIncome ? "Income" : "Expense"}</span>
               </div>
-              <div className="hidden items-center gap-1 sm:flex">
-                <button type="button" onClick={() => onEdit(transaction)} aria-label={`Edit ${transaction.name}`} className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-sage-soft)] hover:text-[var(--paper-ink)]"><Pencil size={15} aria-hidden="true" /></button>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => onEdit(transaction)} aria-label={`Edit ${transaction.name}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--paper-canvas)] text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-sage-soft)] hover:text-[var(--paper-ink)]"><Pencil size={16} aria-hidden="true" /></button>
                 <button type="button" onClick={() => onDelete(transaction.id)} aria-label={`Delete ${transaction.name}`} className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--paper-muted)] transition-colors hover:bg-[#F8E9E5] hover:text-[var(--paper-expense)]"><Trash2 size={15} aria-hidden="true" /></button>
               </div>
             </article>

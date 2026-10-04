@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { Drawer } from "vaul";
+import { useVisualViewportGeometry } from "./useVisualViewportGeometry";
 
 export type MobileFormSheetProps = {
   open: boolean;
@@ -13,18 +14,7 @@ export type MobileFormSheetProps = {
   children: ReactNode;
 };
 
-function getViewportGeometry(): { keyboardOffset: number; availableHeight: number | null } {
-  if (typeof window === "undefined") return { keyboardOffset: 0, availableHeight: null };
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  const viewportOffsetTop = window.visualViewport?.offsetTop ?? 0;
-  return {
-    keyboardOffset: Math.max(0, window.innerHeight - viewportHeight - viewportOffsetTop),
-    availableHeight: window.visualViewport?.height ?? null,
-  };
-}
-
 export function MobileFormSheet({ open, title, description, closeLabel, onOpenChange, returnFocusTo, footer, children }: MobileFormSheetProps): ReactElement | null {
-  const [{ keyboardOffset, availableHeight }, setViewportGeometry] = useState(getViewportGeometry);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
   const focusLifecycleRef = useRef<{ content: EventTarget | null; trigger: HTMLElement | null } | null>(null);
@@ -56,29 +46,15 @@ export function MobileFormSheet({ open, title, description, closeLabel, onOpenCh
       revealFocusedField();
     });
   }, [revealFocusedField]);
+  const { keyboardOffset, availableHeight } = useVisualViewportGeometry(open, scheduleFieldScroll);
 
   useEffect(() => {
-    if (!open) {
-      setViewportGeometry({ keyboardOffset: 0, availableHeight: null });
-      return;
-    }
+    if (!open) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const viewport = window.visualViewport;
-    const updateViewport = () => {
-      setViewportGeometry(getViewportGeometry());
-      scheduleFieldScroll();
-    };
-    updateViewport();
-    viewport?.addEventListener("resize", updateViewport);
-    viewport?.addEventListener("scroll", updateViewport);
-    window.addEventListener("resize", updateViewport);
 
     return () => {
-      viewport?.removeEventListener("resize", updateViewport);
-      viewport?.removeEventListener("scroll", updateViewport);
-      window.removeEventListener("resize", updateViewport);
       if (focusFrameRef.current !== null) window.cancelAnimationFrame(focusFrameRef.current);
       if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
       focusFrameRef.current = null;
@@ -89,7 +65,7 @@ export function MobileFormSheet({ open, title, description, closeLabel, onOpenCh
       contentRef.current = null;
       document.body.style.overflow = previousOverflow;
     };
-  }, [open, scheduleFieldScroll]);
+  }, [open]);
 
   // Unmount Vaul while closed so its viewport subscriptions also leave with the sheet.
   if (!open) return null;

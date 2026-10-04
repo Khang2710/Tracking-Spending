@@ -8,6 +8,14 @@ body {
   margin: 0;
 }
 
+@media (max-width: 767px) {
+  [data-keyboard-safe-form] input,
+  [data-keyboard-safe-form] select,
+  [data-keyboard-safe-form] textarea {
+    font-size: 16px;
+  }
+}
+
 .app-loading-screen {
   min-height: 100vh;
   display: grid;

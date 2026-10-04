@@ -43,6 +43,23 @@ export const savingsGoalSchema = z.object({
   status: z.enum(["IN_PROGRESS", "COMPLETED"]),
 }).strict();
 
+const recurringExpenseBase = z.object({
+  walletId: idSchema,
+  title: z.string().trim().min(1).max(160),
+  amount: z.number().finite().positive().max(999_999_999_999.99),
+  category: z.string().trim().min(1).max(80),
+  startOn: dateSchema,
+  nextDueOn: dateSchema,
+  legacySourceId: z.string().trim().min(1).max(200).optional(),
+});
+
+export const recurringExpenseSchema = z.discriminatedUnion("cadence", [
+  recurringExpenseBase.extend({ cadence: z.literal("WEEKLY"), dayOfWeek: z.number().int().min(1).max(7) }).strict(),
+  recurringExpenseBase.extend({ cadence: z.literal("MONTHLY"), dayOfMonth: z.number().int().min(1).max(31) }).strict(),
+  recurringExpenseBase.extend({ cadence: z.literal("YEARLY"), dayOfMonth: z.number().int().min(1).max(31), monthOfYear: z.number().int().min(1).max(12) }).strict(),
+]);
+
 export type WalletInput = z.infer<typeof walletSchema>;
 export type TransactionInput = z.input<typeof transactionSchema>;
 export type SavingsGoalInput = z.infer<typeof savingsGoalSchema>;
+export type RecurringExpenseInput = z.infer<typeof recurringExpenseSchema>;

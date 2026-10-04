@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAmountInput, toDisplayedAmount, toStoredAmount } from "./currencyAmounts";
+import { formatAbsoluteCurrency, parseAmountInput, toDisplayedAmount, toStoredAmount } from "./currencyAmounts";
 
 describe("currency amount conversion", () => {
   it("stores a USD amount in the VND-based data model and displays it back unchanged", () => {
@@ -16,5 +16,10 @@ describe("currency amount conversion", () => {
 
   it("accepts a localized decimal comma", () => {
     expect(parseAmountInput("3,4")).toBe(3.4);
+  });
+
+  it("formats feature-owned absolute amounts without converting the selected currency", () => {
+    expect(formatAbsoluteCurrency(16, "USD")).toBe("$16");
+    expect(formatAbsoluteCurrency(16, "VND")).toBe("16 ₫");
   });
 });

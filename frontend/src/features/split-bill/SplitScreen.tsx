@@ -6,6 +6,7 @@ import { C } from "../../App";
 import AssignBill from "./AssignBill";
 import DebtBalances from "./DebtBalances";
 import BillHistory from "./BillHistory";
+import type { CurrencyType } from "../../context/currencyAmounts";
 
 export interface SavedBill {
   id: string;
@@ -23,6 +24,7 @@ export interface SavedBill {
   payer: string;
   debts: { name: string; total: number }[];
   grandTotal: number;
+  currency?: CurrencyType;
 }
 
 export interface TransactionRecord {
@@ -279,7 +281,6 @@ export default function SplitScreen({
           <AssignBill
             friends={friends}
             onAddFriend={handleAddFriend}
-            onRemoveFriend={handleRemoveFriend}
             balances={balances}
             setBalances={setBalances}
             userName={userName}

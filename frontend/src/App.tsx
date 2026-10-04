@@ -39,7 +39,7 @@ import { HomeScreen as PaperHomeScreen } from "./features/home/HomeScreen";
 import { AppShell } from "./layout/AppShell";
 import type { AppDestination } from "./layout/navigation";
 import type { RecurringExpense } from "./features/recurring-expenses/recurring.types";
-import { advanceMonthlyDueDate, getUpcomingOccurrences } from "./features/recurring-expenses/recurring.schedule";
+import { getUpcomingOccurrences } from "./features/recurring-expenses/recurring.schedule";
 import { RecurringExpensesSettings } from "./features/recurring-expenses/RecurringExpensesSettings";
 import { MonthSelector } from "./features/statistics/MonthSelector";
 import { MonthlyStatisticsDashboard } from "./features/statistics/MonthlyStatisticsDashboard";
@@ -47,20 +47,25 @@ import { useAuth } from "./features/auth/AuthProvider";
 import { AppLoadingScreen } from "./components/common/AppLoadingScreen";
 import {
   createCloudSavingsGoal,
+  createCloudRecurringExpense,
   createCloudTransaction,
   createCloudWallet,
   deleteCloudSavingsGoal,
+  deleteCloudRecurringExpense,
   deleteCloudTransaction,
   deleteCloudWallet,
   loadCloudFinance,
   saveCloudBudget,
+  confirmCloudRecurringOccurrence,
   updateCloudSavingsGoal,
+  updateCloudRecurringExpense,
   updateCloudTransaction,
   updateCloudWallet,
 } from "./features/finance-data/finance.repository";
 import { emptyCloudFinance } from "./features/finance-data/cloudWorkspaceState";
 import { MobileFormSheet } from "./components/mobile/MobileFormSheet";
 import { NEW_TRANSACTION_FORM_ID, NewTransactionForm } from "./features/transactions/NewTransactionForm";
+import { MoneyInput } from "./components/forms/MoneyInput";
 
 export interface SavingsGoal {
   id: number;
@@ -1871,7 +1876,7 @@ function EditTransactionForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]">
       <div className="flex gap-2 p-1 rounded-xl bg-surf">
         <button
           type="button"
@@ -1906,7 +1911,7 @@ function EditTransactionForm({
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-[var(--paper-ink)] bg-surf"
           style={{ borderColor: C.border }}
         />
       </div>
@@ -1922,7 +1927,7 @@ function EditTransactionForm({
           required
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-[var(--paper-ink)] bg-surf"
           style={{ borderColor: C.border }}
         />
       </div>
@@ -1934,7 +1939,7 @@ function EditTransactionForm({
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-[var(--paper-ink)] bg-surf"
           style={{ borderColor: C.border }}
         >
           {categories.map((cat) => (
@@ -1952,7 +1957,7 @@ function EditTransactionForm({
         <select
           value={walletId}
           onChange={(e) => setWalletId(Number(e.target.value))}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-[var(--paper-ink)] bg-surf"
           style={{ borderColor: C.border }}
         >
           {wallets.map((w) => (
@@ -1972,7 +1977,7 @@ function EditTransactionForm({
           required
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
+          className="w-full px-4 py-2.5 rounded-xl outline-none border text-[var(--paper-ink)] bg-surf"
           style={{ borderColor: C.border }}
         />
       </div>
@@ -2005,7 +2010,8 @@ function AddWalletForm({
   onAdd: (wallet: Omit<Wallet, "id">) => void;
 }) {
   const [label, setLabel] = useState("");
-  const [balance, setBalance] = useState("");
+  const { currency } = useCurrency();
+  const [balance, setBalance] = useState<number | null>(null);
   const [accent, setAccent] = useState<string>(C.purple);
 
   const colors = [
@@ -2018,13 +2024,11 @@ function AddWalletForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!label || !balance) return;
-    const numBal = parseFloat(balance);
-    if (isNaN(numBal) || numBal < 0) return;
+    if (!label || balance === null || !Number.isFinite(balance) || balance < 0) return;
 
     onAdd({
       label,
-      balance: numBal,
+      balance: toStoredAmount(balance, currency),
       accent,
     });
   };
@@ -2045,15 +2049,13 @@ function AddWalletForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Initial Balance ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
+        <label className="text-xs text-tm font-medium">Initial Balance ({currency})</label>
+        <MoneyInput
           required
-          placeholder="0.00"
+          requiredAmount
+          placeholder="0"
           value={balance}
-          onChange={(e) => setBalance(e.target.value)}
+          onValueChange={setBalance}
           className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
           style={{ borderColor: C.border }}
         />
@@ -2098,8 +2100,9 @@ function EditWalletForm({
   onSave: (updated: Wallet) => void;
   onDelete?: (id: number) => void;
 }) {
+  const { currency } = useCurrency();
   const [label, setLabel] = useState(wallet.label);
-  const [balance, setBalance] = useState(wallet.balance.toString());
+  const [balance, setBalance] = useState<number | null>(() => toDisplayedAmount(wallet.balance, currency));
   const [accent, setAccent] = useState(wallet.accent);
 
   const colors = [
@@ -2112,14 +2115,12 @@ function EditWalletForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!label || !balance) return;
-    const numBal = parseFloat(balance);
-    if (isNaN(numBal)) return;
+    if (!label || balance === null || !Number.isFinite(balance)) return;
 
     onSave({
       ...wallet,
       label,
-      balance: numBal,
+      balance: toStoredAmount(balance, currency),
       accent,
     });
   };
@@ -2140,14 +2141,13 @@ function EditWalletForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">Balance ($)</label>
-        <input
-          type="number"
-          step="0.01"
+        <label className="text-xs text-tm font-medium">Balance ({currency})</label>
+        <MoneyInput
           required
-          placeholder="0.00"
+          requiredAmount
+          placeholder="0"
           value={balance}
-          onChange={(e) => setBalance(e.target.value)}
+          onValueChange={setBalance}
           className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
           style={{ borderColor: C.border }}
         />
@@ -2286,6 +2286,38 @@ function EditBudgetForm({
 
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
+function readLegacyRecurringExpenses(): RecurringExpense[] {
+  try {
+    const saved = localStorage.getItem("wealthy_v2_recurring_expenses");
+    const parsed: unknown = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const item = value as Partial<RecurringExpense>;
+      const expectedAmount = Number(item.expectedAmount);
+      const dayOfMonth = Math.min(31, Math.max(1, Number(item.dayOfMonth) || 1));
+      if (!item.id || !item.name?.trim() || !Number.isFinite(expectedAmount) || expectedAmount <= 0 || !item.nextDueDate) return [];
+      return [{
+        id: item.id,
+        name: item.name.trim(),
+        expectedAmount,
+        dayOfMonth,
+        nextDueDate: item.nextDueDate,
+        walletId: Number(item.walletId) || 0,
+        category: item.category?.trim() || "Others",
+        status: item.status === "paused" ? "paused" : "active",
+        frequency: item.frequency ?? "monthly",
+        weekday: item.weekday,
+        monthOfYear: item.monthOfYear,
+        startDate: item.startDate ?? item.nextDueDate,
+      }];
+    });
+  } catch (error) {
+    console.error("Error reading legacy recurring expenses", error);
+    return [];
+  }
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const { formatCurrency, currency } = useCurrency();
@@ -2369,26 +2401,8 @@ export default function App() {
     return 0;
   });
 
-  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_recurring_expenses");
-      const parsed = saved ? JSON.parse(saved) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      console.error("Error reading recurring expenses from localStorage", error);
-      return [];
-    }
-  });
-  const [handledOccurrenceIds, setHandledOccurrenceIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("wealthy_v2_recurring_occurrences");
-      const parsed = saved ? JSON.parse(saved) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      console.error("Error reading recurring occurrences from localStorage", error);
-      return [];
-    }
-  });
+  const legacyRecurringExpensesRef = useRef<RecurringExpense[]>(readLegacyRecurringExpenses());
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>(() => legacyRecurringExpensesRef.current);
   const walletCloudIdsRef = useRef(new Map<number, string>());
   const pendingWalletCreatesRef = useRef(new Map<number, Promise<string>>());
   const transactionCloudIdsRef = useRef(new Map<number, string>());
@@ -2410,7 +2424,6 @@ export default function App() {
       if (error) console.error("Unable to persist user preferences", error);
     });
   }, [currency, i18n.language, user]);
-  const handledOccurrenceIdsRef = useRef(new Set(handledOccurrenceIds));
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -2473,14 +2486,6 @@ export default function App() {
     localStorage.setItem("wealthy_v2_applied_tx_ids", JSON.stringify(appliedTxIds));
   }, [appliedTxIds, isCurrentUserReady]);
 
-  useEffect(() => {
-    localStorage.setItem("wealthy_v2_recurring_expenses", JSON.stringify(recurringExpenses));
-  }, [recurringExpenses]);
-
-  useEffect(() => {
-    localStorage.setItem("wealthy_v2_recurring_occurrences", JSON.stringify(handledOccurrenceIds));
-  }, [handledOccurrenceIds]);
-
   // Reconcile unapplied transactions (e.g. Split Bill transactions) to active wallet balance
   useEffect(() => {
     if (wallets.length > 0 && transactions.length > 0) {
@@ -2528,12 +2533,36 @@ export default function App() {
     setWallets(emptyData.wallets);
     setTransactions(emptyData.transactions);
     setSavingsGoals(emptyData.savingsGoals);
+    setRecurringExpenses(emptyData.recurringExpenses);
     setBudget(emptyData.budget);
     setAppliedTxIds([]);
 
     void loadCloudFinance()
-      .then((cloudData) => {
+      .then(async (cloudData) => {
         if (cancelled) return;
+        const legacyExpenses = legacyRecurringExpensesRef.current;
+        // Import is intentionally resumable. A failed network request must never make
+        // us discard browser data or duplicate the records that already reached cloud.
+        const cloudContainsOnlyImportedLegacy = cloudData.recurringExpenses.length === cloudData.legacyRecurringSourceIds.size;
+        const missingLegacyExpenses = legacyExpenses.filter((expense) => !cloudData.legacyRecurringSourceIds.has(expense.id));
+        if (cloudContainsOnlyImportedLegacy && missingLegacyExpenses.length > 0) {
+          const importResults = await Promise.all(missingLegacyExpenses.map(async (expense) => {
+            const walletCloudId = cloudData.walletCloudIds.get(expense.walletId);
+            if (!walletCloudId) return false;
+            await createCloudRecurringExpense({ ...expense, walletId: walletCloudId, legacySourceId: expense.id });
+            return true;
+          }));
+          if (cancelled) return;
+          if (importResults.every(Boolean)) {
+            cloudData = await loadCloudFinance();
+            // Clear only after a fresh server read proves every legacy record exists.
+            if (legacyExpenses.every((expense) => cloudData.legacyRecurringSourceIds.has(expense.id))) {
+              legacyRecurringExpensesRef.current = [];
+              localStorage.removeItem("wealthy_v2_recurring_expenses");
+              localStorage.removeItem("wealthy_v2_recurring_occurrences");
+            }
+          }
+        }
         applyCloudFinance(cloudData);
         setCloudLoadError("");
         setLoadedUserId(user?.id ?? null);
@@ -2562,7 +2591,11 @@ export default function App() {
 
   const reportCloudSaveError = (error: unknown) => {
     console.error("Unable to save cloud finance data", error);
-    setCloudLoadError(i18n.language?.startsWith("vi") ? "Không thể lưu dữ liệu lên cloud. Hãy thử lại." : "Cloud data could not be saved. Please try again.");
+    const message = error instanceof Error ? error.message : "";
+    const migrationRequired = message.includes("Recurring expenses setup is incomplete");
+    setCloudLoadError(migrationRequired
+      ? (i18n.language?.startsWith("vi") ? "Recurring Expenses chưa được thiết lập trong database. Hãy áp dụng migration rồi thử lại; thông tin bạn đang nhập vẫn được giữ nguyên." : "Recurring Expenses is not set up in the database yet. Apply the migration and try again; the form stays open.")
+      : (i18n.language?.startsWith("vi") ? "Không thể lưu dữ liệu lên cloud. Hãy thử lại." : "Cloud data could not be saved. Please try again."));
   };
 
   const applyCloudFinance = (cloudData: Awaited<ReturnType<typeof loadCloudFinance>>) => {
@@ -2573,6 +2606,7 @@ export default function App() {
     setWallets(cloudData.wallets);
     setTransactions(cloudData.transactions);
     setSavingsGoals(cloudData.savingsGoals);
+    setRecurringExpenses(cloudData.recurringExpenses);
     setBudget(cloudData.budget);
     setAppliedTxIds(cloudData.transactions.map((transaction) => transaction.id));
   };
@@ -2606,34 +2640,56 @@ export default function App() {
     }
   };
 
-  const handleAddRecurringExpense = (expense: Omit<RecurringExpense, "id">) => {
-    const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `recurring-${Date.now()}`;
-    setRecurringExpenses((current) => [...current, { ...expense, id }]);
+  const handleAddRecurringExpense = async (expense: Omit<RecurringExpense, "id">) => {
+    const walletCloudId = walletCloudIdsRef.current.get(expense.walletId);
+    if (!walletCloudId) {
+      reportCloudSaveError(new Error("Recurring expense wallet is not synchronized."));
+      return false;
+    }
+    try {
+      await createCloudRecurringExpense({ ...expense, walletId: walletCloudId });
+      await refreshCloudFinance();
+      return true;
+    } catch (error) {
+      reportCloudSaveError(error);
+      return false;
+    }
   };
 
-  const handleToggleRecurringExpense = (id: string) => {
-    setRecurringExpenses((current) => current.map((expense) => expense.id === id ? { ...expense, status: expense.status === "active" ? "paused" : "active" } : expense));
+  const handleUpdateRecurringExpense = async (id: string, expense: Omit<RecurringExpense, "id">) => {
+    const walletCloudId = walletCloudIdsRef.current.get(expense.walletId);
+    if (!walletCloudId) {
+      reportCloudSaveError(new Error("Recurring expense wallet is not synchronized."));
+      return false;
+    }
+    try {
+      await updateCloudRecurringExpense(id, { ...expense, walletId: walletCloudId });
+      await refreshCloudFinance();
+      return true;
+    } catch (error) {
+      reportCloudSaveError(error);
+      return false;
+    }
   };
 
-  const handleDeleteRecurringExpense = (id: string) => {
-    setRecurringExpenses((current) => current.filter((expense) => expense.id !== id));
+  const handleDeleteRecurringExpense = async (id: string) => {
+    try {
+      await deleteCloudRecurringExpense(id);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleConfirmRecurring = (occurrenceId: string) => {
-    if (handledOccurrenceIdsRef.current.has(occurrenceId)) return;
+  const handleConfirmRecurring = async (occurrenceId: string) => {
     const expense = recurringExpenses.find((item) => `${item.id}:${item.nextDueDate}` === occurrenceId);
     if (!expense) return;
-
-    handledOccurrenceIdsRef.current.add(occurrenceId);
-    setHandledOccurrenceIds((current) => current.includes(occurrenceId) ? current : [...current, occurrenceId]);
-    void handleAddTransaction({
-      name: expense.name,
-      amount: -Math.abs(expense.expectedAmount),
-      date: expense.nextDueDate,
-      category: expense.category,
-      walletId: expense.walletId,
-    }, expense.walletId);
-    setRecurringExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, nextDueDate: advanceMonthlyDueDate(item.nextDueDate, item.dayOfMonth) } : item));
+    try {
+      await confirmCloudRecurringOccurrence(expense.id, expense.nextDueDate);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   // Handle deletion of a transaction (reverses wallet balance)
@@ -2806,8 +2862,9 @@ export default function App() {
     .filter((g) => g.status === "IN_PROGRESS")
     .reduce((sum, g) => sum + g.currentAmount, 0);
   const availableBalance = Math.max(0, totalBalance - activeSavingsSum);
-  const upcomingExpenses = getUpcomingOccurrences(recurringExpenses, new Date(), 14)
-    .filter((occurrence) => !handledOccurrenceIdsRef.current.has(occurrence.occurrenceId));
+  // Each active schedule contributes only its next due date, so Home can show
+  // every relevant upcoming bill without generating an unbounded history.
+  const upcomingExpenses = getUpcomingOccurrences(recurringExpenses, new Date());
 
   if (!isCurrentUserReady) {
     const isVietnamese = i18n.language?.startsWith("vi");
@@ -2911,7 +2968,7 @@ export default function App() {
           locale={i18n.language?.startsWith("vi") ? "vi-VN" : "en-US"}
           formatCurrency={formatCurrency}
           onAdd={handleAddRecurringExpense}
-          onToggle={handleToggleRecurringExpense}
+          onUpdate={handleUpdateRecurringExpense}
           onDelete={handleDeleteRecurringExpense}
         />
       </div>

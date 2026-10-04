@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { C, Card } from "../../App";
 import { SavedBill } from "./SplitScreen";
 import { useCurrency } from "../../context/CurrencyContext";
+import { formatAbsoluteCurrency } from "../../context/currencyAmounts";
 
 interface BillHistoryProps {
   bills: SavedBill[];
@@ -14,7 +15,7 @@ interface BillHistoryProps {
 
 export default function BillHistory({ bills, onDeleteBill, userName }: BillHistoryProps) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency: formatLegacyCurrency } = useCurrency();
   const [selectedBill, setSelectedBill] = useState<SavedBill | null>(null);
   const myName = userName || t("common.you");
 
@@ -36,6 +37,9 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
             </div>
           ) : (
             bills.map((bill) => {
+              const formatBillCurrency = (amount: number) => bill.currency
+                ? formatAbsoluteCurrency(amount, bill.currency)
+                : formatLegacyCurrency(amount);
               const payerName = bill?.payer || "";
               const isPaidByMe = payerName.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase();
               const grandTotal = typeof bill?.grandTotal === "number" ? bill.grandTotal : Number(bill?.grandTotal) || 0;
@@ -49,7 +53,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   style={{ borderColor: C.border }}
                 >
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-sm text-white truncate">{bill?.title || "Hóa đơn"}</h4>
+                    <h4 className="font-bold text-sm text-[var(--paper-ink)] truncate">{bill?.title || t("split.untitledBill")}</h4>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tm mt-1">
                       <span className="flex items-center gap-1">
                         <Calendar size={12} /> {bill?.date || ""}
@@ -57,7 +61,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                       <span className="flex items-center gap-1">
                         <User size={12} />
                         {t("split.payerLabel")}:{" "}
-                        <span className={isPaidByMe ? "text-green-400 font-bold" : "text-white"}>
+                        <span className={isPaidByMe ? "text-green font-bold" : "text-[var(--paper-ink)]"}>
                           {isPaidByMe ? t("common.you") : payerName}
                         </span>
                       </span>
@@ -65,7 +69,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   </div>
 
                   <div className="text-right">
-                    <p className="text-[15px] font-extrabold text-gold">{formatCurrency(grandTotal)}</p>
+                    <p className="text-[15px] font-extrabold text-gold">{formatBillCurrency(grandTotal)}</p>
                     <span className="text-[10px] text-tm uppercase tracking-wider mt-1 block">
                       {itemsCount} {t("split.items")}
                     </span>
@@ -100,11 +104,12 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
               {/* Header */}
               <div className="px-6 py-5 flex items-center justify-between border-b border-solid" style={{ borderColor: C.border }}>
                 <div>
-                  <h3 className="font-bold text-white text-[16px]">{selectedBill.title}</h3>
+                  <h3 className="font-bold text-[var(--paper-ink)] text-[16px]">{selectedBill.title}</h3>
                   <p className="text-[11px] text-tm mt-0.5">{selectedBill.date}</p>
                 </div>
                 <motion.button
                   type="button"
+                  aria-label={t("common.close")}
                   onClick={() => setSelectedBill(null)}
                   whileTap={{ scale: 0.98 }}
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-surf cursor-pointer border-0 bg-transparent"
@@ -118,22 +123,22 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                 {/* Summary Card */}
                 <div className="p-4 rounded-2xl flex items-center justify-between text-sm" style={{ background: C.surf + "30" }}>
                   <div>
-                    <p className="text-xs text-tm uppercase font-bold tracking-wider mb-1">Paid By</p>
-                    <span className="font-bold text-white flex items-center gap-1">
+                    <p className="text-xs text-tm uppercase font-bold tracking-wider mb-1">{t("split.paidByLabel")}</p>
+                    <span className="font-bold text-[var(--paper-ink)] flex items-center gap-1">
                       {selectedBill.payer.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase()
-                        ? `${selectedBill.payer} (You)`
+                        ? `${selectedBill.payer} (${t("common.you")})`
                         : selectedBill.payer}
                     </span>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-tm uppercase font-bold tracking-wider mb-1">Total Bill</p>
-                    <span className="text-xl font-black text-gold">{formatCurrency(selectedBill.grandTotal)}</span>
+                    <p className="text-xs text-tm uppercase font-bold tracking-wider mb-1">{t("split.totalBill")}</p>
+                    <span className="text-xl font-black text-gold">{selectedBill.currency ? formatAbsoluteCurrency(selectedBill.grandTotal, selectedBill.currency) : formatLegacyCurrency(selectedBill.grandTotal)}</span>
                   </div>
                 </div>
 
                 {/* Itemized List */}
                 <div className="flex flex-col gap-3">
-                  <h4 className="text-[11px] text-tm uppercase font-bold tracking-wider mb-1">Itemized breakdown</h4>
+                  <h4 className="text-[11px] text-tm uppercase font-bold tracking-wider mb-1">{t("split.itemizedBreakdown")}</h4>
                   <div className="flex flex-col gap-2.5">
                     {selectedBill.items.map((item, idx) => (
                       <div
@@ -142,21 +147,21 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                         style={{ background: C.card, borderColor: C.border + "60" }}
                       >
                         <div className="flex items-start justify-between gap-3 text-sm">
-                          <span className="font-bold text-white">{item.name}</span>
-                          <span className="font-semibold text-gold">{formatCurrency(item.price)}</span>
+                          <span className="font-bold text-[var(--paper-ink)]">{item.name}</span>
+                          <span className="font-semibold text-gold">{selectedBill.currency ? formatAbsoluteCurrency(item.price, selectedBill.currency) : formatLegacyCurrency(item.price)}</span>
                         </div>
                         {(item.discount ?? 0) > 0 && (
-                          <div className="text-xs font-semibold text-green">Item discount: −{formatCurrency(item.discount ?? 0)}</div>
+                          <div className="text-xs font-semibold text-green">{t("split.itemDiscount")}: −{selectedBill.currency ? formatAbsoluteCurrency(item.discount ?? 0, selectedBill.currency) : formatLegacyCurrency(item.discount ?? 0)}</div>
                         )}
                         <div className="flex flex-wrap gap-1.5 items-center">
-                          <span className="text-[10px] text-tm uppercase font-bold tracking-wider mr-1">Consumers:</span>
+                          <span className="text-[10px] text-tm uppercase font-bold tracking-wider mr-1">{t("split.consumers")}:</span>
                           {item.consumers.map((c) => (
                             <span
                               key={c}
                               className="text-[10px] px-2 py-0.5 font-bold rounded-lg font-sans"
                               style={{ background: C.gold + "15", color: C.gold }}
                             >
-                              {c.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase() ? "You" : c}
+                              {c.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase() ? t("common.you") : c}
                             </span>
                           ))}
                         </div>
@@ -171,31 +176,31 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                     const tax = selectedBill.tax ?? selectedBill.items.reduce((sum, item) => sum + item.price, 0) * ((selectedBill.taxPercent ?? 0) / 100);
                     const itemDiscounts = selectedBill.items.reduce((sum, item) => sum + (item.discount ?? 0), 0);
                     const adjustments = [
-                      ["Item discounts", itemDiscounts, "negative"],
-                      ["Bill discount", selectedBill.billDiscount ?? 0, "negative"],
-                      ["Tax", tax, "positive"],
-                      ["Service charge", selectedBill.serviceCharge ?? 0, "positive"],
-                      ["Tip / gratuity", selectedBill.tip ?? 0, "positive"],
-                      ["Other fees", selectedBill.otherFees ?? 0, "positive"],
+                      [t("split.itemDiscounts"), itemDiscounts, "negative"],
+                      [t("split.billDiscount"), selectedBill.billDiscount ?? 0, "negative"],
+                      [t("split.taxLabel"), tax, "positive"],
+                      [t("split.serviceCharge"), selectedBill.serviceCharge ?? 0, "positive"],
+                      [t("split.tipGratuity"), selectedBill.tip ?? 0, "positive"],
+                      [t("split.otherFees"), selectedBill.otherFees ?? 0, "positive"],
                     ] as const;
                     return adjustments.filter(([, amount]) => amount > 0).map(([label, amount, direction]) => (
                       <div key={label} className={`flex justify-between text-xs ${direction === "negative" ? "text-green" : "text-tm"}`}>
                         <span>{label}:</span>
-                        <span className="font-semibold text-white">{direction === "negative" ? "−" : ""}{formatCurrency(amount)}</span>
+                        <span className="font-semibold text-[var(--paper-ink)]">{direction === "negative" ? "−" : ""}{selectedBill.currency ? formatAbsoluteCurrency(amount, selectedBill.currency) : formatLegacyCurrency(amount)}</span>
                       </div>
                     ));
                   })()}
                   {selectedBill.receiptTotal !== null && selectedBill.receiptTotal !== undefined && (
                     <div className="flex justify-between text-xs text-tm">
-                      <span>Receipt total:</span>
-                      <span className="font-semibold text-white">{formatCurrency(selectedBill.receiptTotal)}</span>
+                      <span>{t("split.receiptTotal")}:</span>
+                      <span className="font-semibold text-[var(--paper-ink)]">{selectedBill.currency ? formatAbsoluteCurrency(selectedBill.receiptTotal, selectedBill.currency) : formatLegacyCurrency(selectedBill.receiptTotal)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Debts distribution */}
                 <div className="flex flex-col gap-3">
-                  <h4 className="text-[11px] text-tm uppercase font-bold tracking-wider mb-1">Debts distribution</h4>
+                  <h4 className="text-[11px] text-tm uppercase font-bold tracking-wider mb-1">{t("split.debtsDistribution")}</h4>
                   <div className="flex flex-col gap-2">
                     {selectedBill.debts.map((d) => {
                       const isMe = d.name.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase();
@@ -212,9 +217,9 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                             >
                               {getInitials(d.name)}
                             </div>
-                            <span className="font-semibold text-white">{isMe ? `${d.name} (You)` : d.name}</span>
+                            <span className="font-semibold text-[var(--paper-ink)]">{isMe ? `${d.name} (${t("common.you")})` : d.name}</span>
                           </div>
-                          <span className="font-bold text-white">{formatCurrency(d.total)}</span>
+                          <span className="font-bold text-[var(--paper-ink)]">{selectedBill.currency ? formatAbsoluteCurrency(d.total, selectedBill.currency) : formatLegacyCurrency(d.total)}</span>
                         </div>
                       );
                     })}
@@ -234,7 +239,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                     whileTap={{ scale: 0.98 }}
                     className="px-4 py-2.5 rounded-xl text-xs font-bold text-red-400 hover:text-white hover:bg-red-500/10 cursor-pointer border border-solid border-red-500/20 bg-transparent transition-colors"
                   >
-                    Delete Record
+                    {t("split.deleteRecord")}
                   </motion.button>
                 )}
                 <motion.button
@@ -244,7 +249,7 @@ export default function BillHistory({ bills, onDeleteBill, userName }: BillHisto
                   className="px-6 py-2.5 rounded-xl text-xs font-bold transition-all hover:brightness-110 cursor-pointer border-0 ml-auto"
                   style={{ background: C.gold, color: C.bg }}
                 >
-                  Close
+                  {t("common.close")}
                 </motion.button>
               </div>
             </motion.div>

@@ -12,6 +12,8 @@ describe("emptyCloudFinance", () => {
       transactionCloudIds: new Map(),
       savingsGoalCloudIds: new Map(),
       budgetCloudId: null,
+      recurringExpenses: [],
+      legacyRecurringSourceIds: new Set(),
     });
   });
 });

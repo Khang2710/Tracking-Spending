@@ -4,7 +4,7 @@ const apiRequestMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/apiClient", () => ({ apiRequest: apiRequestMock }));
 
-import { createCloudSavingsGoal, createCloudTransaction, createCloudWallet, deleteCloudTransaction, mapCloudFinance, monthStartInLocalTime, updateCloudTransaction } from "./finance.repository";
+import { confirmCloudRecurringOccurrence, createCloudRecurringExpense, createCloudSavingsGoal, createCloudTransaction, createCloudWallet, deleteCloudTransaction, mapCloudFinance, monthStartInLocalTime, updateCloudTransaction } from "./finance.repository";
 
 beforeEach(() => apiRequestMock.mockReset());
 
@@ -180,5 +180,26 @@ describe("transaction note payload normalization", () => {
     for (const [, options] of apiRequestMock.mock.calls) {
       expect(JSON.parse(options.body)).toMatchObject({ note: expected });
     }
+  });
+});
+
+describe("recurring expense persistence", () => {
+  const recurring = {
+    id: "rent", name: "Rent", expectedAmount: 400_000, frequency: "monthly" as const,
+    dayOfMonth: 31, nextDueDate: "2026-10-31", startDate: "2026-10-01", walletId: "wallet-a", category: "Housing", status: "active" as const,
+  };
+
+  it("maps cloud schedules and sends canonical amounts with their selected recurrence fields", async () => {
+    const mapped = mapCloudFinance({
+      wallets: [{ id: "wallet-a", label: "Cash", balance: 10, accent: "#111" }], transactions: [], savingsGoals: [], budget: null,
+      recurringExpenses: [{ id: "rent", wallet_id: "wallet-a", title: "Rent", amount: "400000", category: "Housing", cadence: "MONTHLY", start_on: "2026-10-01", next_due_on: "2026-10-31", day_of_week: null, day_of_month: 31, month_of_year: null, active: true }],
+    });
+    expect(mapped.recurringExpenses).toEqual([expect.objectContaining({ id: "rent", walletId: 1, frequency: "monthly", expectedAmount: 400_000, dayOfMonth: 31 })]);
+
+    apiRequestMock.mockResolvedValueOnce({ id: "rent" }).mockResolvedValueOnce({ occurrenceId: "o-1", transactionId: "t-1", nextDueOn: "2026-11-30" });
+    await createCloudRecurringExpense(recurring);
+    await expect(confirmCloudRecurringOccurrence("rent", "2026-10-31")).resolves.toEqual({ occurrenceId: "o-1", transactionId: "t-1", nextDueOn: "2026-11-30" });
+    expect(apiRequestMock).toHaveBeenNthCalledWith(1, "/api/finance/recurring-expenses", { method: "POST", body: JSON.stringify({ walletId: "wallet-a", title: "Rent", amount: 400_000, category: "Housing", startOn: "2026-10-01", nextDueOn: "2026-10-31", cadence: "MONTHLY", dayOfMonth: 31 }) });
+    expect(apiRequestMock).toHaveBeenNthCalledWith(2, "/api/finance/recurring-expenses/rent/occurrences/2026-10-31/confirm", { method: "POST" });
   });
 });

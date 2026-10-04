@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 function createFinanceMock(): FinanceService {
   return {
     loadWorkspace: vi.fn().mockResolvedValue({
-      wallets: [], transactions: [], savingsGoals: [], budget: null,
+      wallets: [], transactions: [], savingsGoals: [], budget: null, recurringExpenses: [], recurringOccurrences: [],
     }),
     createWallet: vi.fn().mockResolvedValue("wallet-1"),
     updateWallet: vi.fn().mockResolvedValue(undefined),
@@ -19,6 +19,10 @@ function createFinanceMock(): FinanceService {
     createSavingsGoal: vi.fn().mockResolvedValue("goal-1"),
     updateSavingsGoal: vi.fn().mockResolvedValue(undefined),
     deleteSavingsGoal: vi.fn().mockResolvedValue(undefined),
+    createRecurringExpense: vi.fn().mockResolvedValue("recurring-1"),
+    updateRecurringExpense: vi.fn().mockResolvedValue(undefined),
+    deleteRecurringExpense: vi.fn().mockResolvedValue(undefined),
+    confirmRecurringOccurrence: vi.fn().mockResolvedValue({ occurrenceId: "occurrence-1", transactionId: "transaction-1", nextDueOn: "2026-11-01" }),
   };
 }
 
@@ -29,6 +33,17 @@ const validTransaction = {
   occurredOn: "2026-09-30",
   amount: -12.5,
   category: "Food",
+};
+
+const validRecurringExpense = {
+  walletId: "550e8400-e29b-41d4-a716-446655440000",
+  title: "Rent",
+  amount: 6_000_000,
+  category: "Housing",
+  cadence: "MONTHLY",
+  startOn: "2026-10-01",
+  nextDueOn: "2026-10-01",
+  dayOfMonth: 1,
 };
 
 describe("finance API", () => {
@@ -43,7 +58,7 @@ describe("finance API", () => {
     await request(app)
       .get("/api/finance/workspace?month=2026-09-01")
       .set(authHeader)
-      .expect(200, { wallets: [], transactions: [], savingsGoals: [], budget: null });
+      .expect(200, { wallets: [], transactions: [], savingsGoals: [], budget: null, recurringExpenses: [], recurringOccurrences: [] });
 
     expect(finance.loadWorkspace).toHaveBeenCalledWith("user-token", "2026-09-01");
   });
@@ -84,6 +99,33 @@ describe("finance API", () => {
       .send(body)
       .expect(201, { id: "transaction-1" });
     expect(finance.createTransaction).toHaveBeenCalledWith("user-token", { ...body, note: null });
+  });
+
+  it("creates and confirms a validated recurring expense through the authenticated service", async () => {
+    const finance = createFinanceMock();
+    const app = createApp({ extractReceipt: vi.fn(), verifyAccessToken: vi.fn().mockResolvedValue({ id: "user-1" }), finance });
+
+    await request(app).post("/api/finance/recurring-expenses").set(authHeader).send(validRecurringExpense).expect(201, { id: "recurring-1" });
+    expect(finance.createRecurringExpense).toHaveBeenCalledWith("user-token", validRecurringExpense);
+
+    await request(app)
+      .post("/api/finance/recurring-expenses/550e8400-e29b-41d4-a716-446655440000/occurrences/2026-10-01/confirm")
+      .set(authHeader)
+      .expect(200, { occurrenceId: "occurrence-1", transactionId: "transaction-1", nextDueOn: "2026-11-01" });
+    expect(finance.confirmRecurringOccurrence).toHaveBeenCalledWith("user-token", "550e8400-e29b-41d4-a716-446655440000", "2026-10-01");
+  });
+
+  it.each([
+    { ...validRecurringExpense, cadence: "WEEKLY" },
+    { ...validRecurringExpense, cadence: "WEEKLY", dayOfWeek: 8 },
+    { ...validRecurringExpense, cadence: "YEARLY", dayOfMonth: 0, monthOfYear: 2 },
+    { ...validRecurringExpense, cadence: "YEARLY", dayOfMonth: 31, monthOfYear: 13 },
+    { ...validRecurringExpense, amount: 0 },
+  ])("rejects invalid recurring schedules before querying the database", async (body) => {
+    const finance = createFinanceMock();
+    const app = createApp({ extractReceipt: vi.fn(), verifyAccessToken: vi.fn().mockResolvedValue({ id: "user-1" }), finance });
+    await request(app).post("/api/finance/recurring-expenses").set(authHeader).send(body).expect(400, { error: "Invalid request" });
+    expect(finance.createRecurringExpense).not.toHaveBeenCalled();
   });
 
   it.each([

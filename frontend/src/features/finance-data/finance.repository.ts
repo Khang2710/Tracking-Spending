@@ -1,5 +1,6 @@
 import type { SavingsGoal, Transaction, Wallet } from "../../types/finance";
 import { apiRequest } from "../../services/apiClient";
+import type { RecurringExpense, RecurringFrequency } from "../recurring-expenses/recurring.types";
 
 interface CloudWallet {
   id: string;
@@ -34,11 +35,37 @@ interface CloudBudget {
   amount: string | number;
 }
 
+interface CloudRecurringExpense {
+  id: string;
+  wallet_id: string | null;
+  title: string;
+  amount: string | number;
+  category: string;
+  cadence: "WEEKLY" | "MONTHLY" | "YEARLY";
+  start_on?: string;
+  next_due_on: string;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  month_of_year?: number | null;
+  legacy_source_id?: string | null;
+  active: boolean;
+}
+
+interface CloudRecurringOccurrence {
+  id: string;
+  recurring_expense_id: string;
+  due_on: string;
+  status: "PENDING" | "CONFIRMED" | "SKIPPED";
+  transaction_id: string | null;
+}
+
 export interface CloudFinanceRows {
   wallets: CloudWallet[];
   transactions: CloudTransaction[];
   savingsGoals: CloudSavingsGoal[];
   budget: CloudBudget | null;
+  recurringExpenses?: CloudRecurringExpense[];
+  recurringOccurrences?: CloudRecurringOccurrence[];
 }
 
 export interface MappedCloudFinance {
@@ -50,6 +77,9 @@ export interface MappedCloudFinance {
   transactionCloudIds: Map<number, string>;
   savingsGoalCloudIds: Map<number, string>;
   budgetCloudId: string | null;
+  recurringExpenses: RecurringExpense[];
+  /** Legacy browser ids that have been durably imported into this account. */
+  legacyRecurringSourceIds: Set<string>;
 }
 
 export function monthStartInLocalTime(date = new Date()): string {
@@ -104,6 +134,28 @@ export function mapCloudFinance(rows: CloudFinanceRows): MappedCloudFinance {
     };
   });
 
+  const legacyRecurringSourceIds = new Set((rows.recurringExpenses ?? []).flatMap((expense) =>
+    expense.legacy_source_id ? [expense.legacy_source_id] : [],
+  ));
+  const recurringExpenses = (rows.recurringExpenses ?? []).flatMap((expense) => {
+    const frequency = expense.cadence.toLowerCase() as RecurringFrequency;
+    if (!(["weekly", "monthly", "yearly"] as const).includes(frequency)) return [];
+    return [{
+      id: expense.id,
+      name: expense.title,
+      expectedAmount: Number(expense.amount),
+      dayOfMonth: Number(expense.day_of_month ?? expense.next_due_on.slice(-2)) || 1,
+      nextDueDate: expense.next_due_on,
+      walletId: expense.wallet_id ? walletLocalIds.get(expense.wallet_id) ?? 0 : 0,
+      category: expense.category,
+      status: expense.active ? "active" as const : "paused" as const,
+      frequency,
+      weekday: expense.day_of_week ?? localIsoWeekday(expense.next_due_on),
+      monthOfYear: (expense.month_of_year ?? Number(expense.next_due_on.slice(5, 7))) || undefined,
+      startDate: expense.start_on ?? expense.next_due_on,
+    }];
+  });
+
   return {
     wallets,
     transactions,
@@ -113,7 +165,16 @@ export function mapCloudFinance(rows: CloudFinanceRows): MappedCloudFinance {
     transactionCloudIds,
     savingsGoalCloudIds,
     budgetCloudId: rows.budget?.id ?? null,
+    recurringExpenses,
+    legacyRecurringSourceIds,
   };
+}
+
+function localIsoWeekday(isoDate: string): number | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return undefined;
+  const local = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return local.getDay() || 7;
 }
 
 export async function loadCloudFinance(): Promise<MappedCloudFinance> {
@@ -225,4 +286,41 @@ export async function updateCloudSavingsGoal(id: string, goal: Omit<SavingsGoal,
 
 export async function deleteCloudSavingsGoal(id: string): Promise<void> {
   await apiRequest(`/api/finance/savings-goals/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+type RecurringExpenseWrite = Omit<RecurringExpense, "id" | "walletId"> & { walletId: string; legacySourceId?: string };
+
+function recurringExpensePayload(expense: RecurringExpenseWrite) {
+  const schedule = expense.frequency === "weekly"
+    ? { cadence: "WEEKLY", dayOfWeek: expense.weekday }
+    : expense.frequency === "yearly"
+      ? { cadence: "YEARLY", dayOfMonth: expense.dayOfMonth, monthOfYear: expense.monthOfYear }
+      : { cadence: "MONTHLY", dayOfMonth: expense.dayOfMonth };
+  return {
+    walletId: expense.walletId,
+    title: expense.name,
+    amount: expense.expectedAmount,
+    category: expense.category,
+    startOn: expense.startDate,
+    nextDueOn: expense.nextDueDate,
+    ...schedule,
+    ...(expense.legacySourceId ? { legacySourceId: expense.legacySourceId } : {}),
+  };
+}
+
+export async function createCloudRecurringExpense(expense: RecurringExpenseWrite): Promise<string> {
+  const result = await apiRequest<{ id: string }>("/api/finance/recurring-expenses", { method: "POST", body: JSON.stringify(recurringExpensePayload(expense)) });
+  return result.id;
+}
+
+export async function updateCloudRecurringExpense(id: string, expense: RecurringExpenseWrite): Promise<void> {
+  await apiRequest(`/api/finance/recurring-expenses/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(recurringExpensePayload(expense)) });
+}
+
+export async function deleteCloudRecurringExpense(id: string): Promise<void> {
+  await apiRequest(`/api/finance/recurring-expenses/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function confirmCloudRecurringOccurrence(id: string, dueOn: string): Promise<{ occurrenceId: string; transactionId: string; nextDueOn: string }> {
+  return apiRequest(`/api/finance/recurring-expenses/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(dueOn)}/confirm`, { method: "POST" });
 }

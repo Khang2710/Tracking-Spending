@@ -9,7 +9,21 @@ vi.mock("../../App", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string, options?: { name?: string }) => ({
+    "split.taxLabel": "Tax",
+    "split.serviceCharge": "Service charge",
+    "split.receiptTotal": "Receipt total",
+    "split.receiptMatches": "Matches receipt",
+    "split.breakdownItem": "Item",
+    "split.itemDiscount": "Item discount",
+    "split.billDiscount": "Bill discount",
+    "split.tipGratuity": "Tip / gratuity",
+    "split.otherFees": "Other fees",
+    "split.whoPaid": "Who paid?",
+    "split.toggleParticipant": `Assign ${options?.name ?? "participant"}`,
+    "split.removeParticipant": `Remove ${options?.name ?? "participant"}`,
+    "split.removeParticipantConfirm": `Confirm removing ${options?.name ?? "participant"}`,
+  }[key] ?? key) }),
 }));
 
 vi.mock("./OcrScannerCard", () => ({
@@ -55,7 +69,6 @@ describe("AssignBill receipt breakdown", () => {
         <AssignBill
           friends={[]}
           onAddFriend={vi.fn()}
-          onRemoveFriend={vi.fn()}
           balances={[]}
           setBalances={vi.fn()}
           userName="Khang"
@@ -66,9 +79,9 @@ describe("AssignBill receipt breakdown", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Use scanned receipt" }));
 
-    expect(screen.getByLabelText("Tax")).toHaveValue(7);
-    expect(screen.getByLabelText("Service charge")).toHaveValue(36);
-    expect(screen.getByLabelText("Receipt total")).toHaveValue(234);
+    expect(screen.getByLabelText("Tax")).toHaveValue("7");
+    expect(screen.getByLabelText("Service charge")).toHaveValue("36");
+    expect(screen.getByLabelText("Receipt total")).toHaveValue("234");
     expect(screen.getByText(/service charge \$36/i)).toBeInTheDocument();
     expect(screen.getByText("Matches receipt:")).toBeInTheDocument();
   });
@@ -76,17 +89,36 @@ describe("AssignBill receipt breakdown", () => {
   it("accumulates scanned receipt-level amounts and preserves an explicit zero total", () => {
     render(
       <CurrencyProvider>
-        <AssignBill friends={[]} onAddFriend={vi.fn()} onRemoveFriend={vi.fn()} balances={[]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
+        <AssignBill friends={[]} onAddFriend={vi.fn()} balances={[]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
       </CurrencyProvider>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Use scanned receipt" }));
     fireEvent.click(screen.getByRole("button", { name: "Use another receipt" }));
-    expect(screen.getByLabelText("Tax")).toHaveValue(8);
-    expect(screen.getByLabelText("Service charge")).toHaveValue(38);
-    expect(screen.getByLabelText("Receipt total")).toHaveValue(247);
+    expect(screen.getByLabelText("Tax")).toHaveValue("8");
+    expect(screen.getByLabelText("Service charge")).toHaveValue("38");
+    expect(screen.getByLabelText("Receipt total")).toHaveValue("247");
 
     fireEvent.click(screen.getByRole("button", { name: "Use zero-total receipt" }));
-    expect(screen.getByLabelText("Receipt total")).toHaveValue(247);
+    expect(screen.getByLabelText("Receipt total")).toHaveValue("247");
+  });
+
+  it("removes an assigned payer only from the current draft after confirmation", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <CurrencyProvider>
+        <AssignBill friends={["Minh"]} onAddFriend={vi.fn()} balances={[{ id: 1, name: "Minh", balance: 25, history: [] }]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
+      </CurrencyProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Use scanned receipt" }));
+    fireEvent.click(screen.getByText("Dinner"));
+    fireEvent.click(screen.getByRole("button", { name: "Assign Minh" }));
+    fireEvent.change(screen.getByLabelText("Who paid?"), { target: { value: "Minh" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove Minh" }));
+
+    expect(confirm).toHaveBeenCalledWith("Confirm removing Minh");
+    expect(screen.queryByRole("button", { name: "Remove Minh" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Who paid?")).toHaveValue("Khang");
   });
 });

@@ -5,11 +5,13 @@ import {
   budgetSchema,
   idSchema,
   monthSchema,
+  dateSchema,
+  recurringExpenseSchema,
   savingsGoalSchema,
   transactionSchema,
   walletSchema,
 } from "./finance.schemas.js";
-import { FinanceConflictError, FinanceNotFoundError, type FinanceService } from "./finance.repository.js";
+import { FinanceConflictError, FinanceMigrationRequiredError, FinanceNotFoundError, type FinanceService } from "./finance.repository.js";
 
 function route(handler: (request: AuthenticatedRequest) => Promise<{ status?: number; body?: unknown }> | { status?: number; body?: unknown }): RequestHandler {
   return async (request, response) => {
@@ -27,6 +29,10 @@ function route(handler: (request: AuthenticatedRequest) => Promise<{ status?: nu
       }
       if (error instanceof FinanceConflictError) {
         response.status(409).json({ error: "Finance operation conflicts with existing data" });
+        return;
+      }
+      if (error instanceof FinanceMigrationRequiredError) {
+        response.status(503).json({ error: "Recurring expenses setup is incomplete. Apply the recurring-expenses database migration, then try again." });
         return;
       }
       console.error("Finance request failed");
@@ -90,5 +96,21 @@ export function createFinanceRouter(finance: FinanceService) {
     await finance.deleteSavingsGoal(token(request), idSchema.parse(request.params.id));
     return { body: { ok: true } };
   }));
+
+  router.post("/recurring-expenses", route(async (request) => ({
+    status: 201,
+    body: { id: await finance.createRecurringExpense(token(request), recurringExpenseSchema.parse(request.body)) },
+  })));
+  router.put("/recurring-expenses/:id", route(async (request) => {
+    await finance.updateRecurringExpense(token(request), idSchema.parse(request.params.id), recurringExpenseSchema.parse(request.body));
+    return { body: { ok: true } };
+  }));
+  router.delete("/recurring-expenses/:id", route(async (request) => {
+    await finance.deleteRecurringExpense(token(request), idSchema.parse(request.params.id));
+    return { body: { ok: true } };
+  }));
+  router.post("/recurring-expenses/:id/occurrences/:dueOn/confirm", route(async (request) => ({
+    body: await finance.confirmRecurringOccurrence(token(request), idSchema.parse(request.params.id), dateSchema.parse(request.params.dueOn)),
+  })));
   return router;
 }
