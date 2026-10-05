@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import type { Transaction, Wallet } from "../../App";
+import type { Transaction, Wallet } from "../../types/finance";
 import { useCurrency } from "../../context/CurrencyContext";
 import { parseAmountInput, toStoredAmount } from "../../context/currencyAmounts";
 import { classifyTransactionCategory } from "./categoryClassifier";

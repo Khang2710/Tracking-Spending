@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Sparkles, Camera, ImagePlus, Loader2, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { C } from "../../App";
+import { C } from "../../design/tokens";
 import { processReceiptOcr, type OcrScanResult } from "../../services/ocrService";
 import { compressImage } from "../../utils/imageCompressor";
 

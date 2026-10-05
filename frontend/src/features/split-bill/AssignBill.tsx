@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { Plus, Trash2, ArrowUpRight, Banknote } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { C, Card } from "../../App";
+import { Card } from "../../components/common/Card";
+import { C } from "../../design/tokens";
 
 interface SplitItem {
   id: number;
@@ -12,7 +13,7 @@ interface SplitItem {
 }
 
 import { FriendBalanceItem, SavedBill } from "./SplitScreen";
-import { Transaction } from "../../App";
+import type { Transaction } from "../../types/finance";
 import { useCurrency } from "../../context/CurrencyContext";
 import { formatAbsoluteCurrency, getCurrencySymbol, toStoredAmount } from "../../context/currencyAmounts";
 import { MoneyInput } from "../../components/forms/MoneyInput";
@@ -26,7 +27,6 @@ import { removeDraftParticipant } from "./splitBillDraft";
 interface AssignBillProps {
   friends: string[];
   onAddFriend: (name: string) => void;
-  balances: FriendBalanceItem[];
   setBalances: React.Dispatch<React.SetStateAction<FriendBalanceItem[]>>;
   userName: string;
   setBills: React.Dispatch<React.SetStateAction<SavedBill[]>>;
@@ -36,7 +36,6 @@ interface AssignBillProps {
 export default function AssignBill({
   friends,
   onAddFriend,
-  balances,
   setBalances,
   userName,
   setBills,

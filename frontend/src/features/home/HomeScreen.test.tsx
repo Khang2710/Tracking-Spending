@@ -8,7 +8,6 @@ import { HomeScreen } from "./HomeScreen";
 const callbacks = {
   onEditBudget: vi.fn(),
   onAddTransaction: vi.fn(),
-  onScanReceipt: vi.fn(),
   onAddWallet: vi.fn(),
   onEditWallet: vi.fn(),
   onEditTransaction: vi.fn(),

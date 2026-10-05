@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { C } from "../../App";
+import { C } from "../../design/tokens";
 import AssignBill from "./AssignBill";
 import DebtBalances from "./DebtBalances";
 import BillHistory from "./BillHistory";
@@ -43,7 +43,7 @@ export interface FriendBalanceItem {
   history: TransactionRecord[];
 }
 
-import { Transaction } from "../../App";
+import type { Transaction } from "../../types/finance";
 
 export default function SplitScreen({
   userName,
@@ -170,12 +170,6 @@ export default function SplitScreen({
     ]);
   };
 
-  const handleRemoveFriend = (name: string) => {
-    const normName = name.normalize("NFC").trim().toLowerCase();
-    setFriends((prev) => prev.filter((f) => f.normalize("NFC").trim().toLowerCase() !== normName));
-    setBalances((prev) => prev.filter((b) => b.name.normalize("NFC").trim().toLowerCase() !== normName));
-  };
-
   const handleSettleTransaction = (friendName: string, transactionId: string) => {
     const normFriend = friendName.normalize("NFC").trim().toLowerCase();
     setBalances((prev) =>
@@ -281,7 +275,6 @@ export default function SplitScreen({
           <AssignBill
             friends={friends}
             onAddFriend={handleAddFriend}
-            balances={balances}
             setBalances={setBalances}
             userName={userName}
             setBills={setBills}
@@ -299,7 +292,6 @@ export default function SplitScreen({
           <DebtBalances
             balances={balances}
             setBalances={setBalances}
-            onRemoveFriend={handleRemoveFriend}
             onSettleTransaction={handleSettleTransaction}
           />
         </div>

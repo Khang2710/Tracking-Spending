@@ -6,13 +6,22 @@ interface CloudBudget { id: string; amount: number | string }
 interface SupabaseConfig { supabaseUrl: string; supabasePublishableKey: string }
 interface RecurringConfirmation { occurrenceId: string; transactionId: string; nextDueOn: string }
 
+export interface FinanceWorkspace {
+  wallets: unknown[];
+  transactions: unknown[];
+  savingsGoals: unknown[];
+  budget: CloudBudget | null;
+  recurringExpenses: unknown[];
+  recurringOccurrences: unknown[];
+}
+
 export class FinanceNotFoundError extends Error {}
 export class FinanceConflictError extends Error {}
 /** The app can keep reading old workspaces before deployment, but writes need the additive recurring migration. */
 export class FinanceMigrationRequiredError extends Error {}
 
 export interface FinanceService {
-  loadWorkspace(accessToken: string, month: string): Promise<unknown>;
+  loadWorkspace(accessToken: string, month: string): Promise<FinanceWorkspace>;
   createWallet(accessToken: string, input: WalletInput): Promise<string>;
   updateWallet(accessToken: string, id: string, input: WalletInput): Promise<void>;
   deleteWallet(accessToken: string, id: string): Promise<void>;

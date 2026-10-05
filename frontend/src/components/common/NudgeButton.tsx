@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { toBlob } from "html-to-image";
 import { useTranslation } from "react-i18next";
-import { C } from "../../App";
+import { C } from "../../design/tokens";
 import { useCurrency } from "../../context/CurrencyContext";
 
 interface NudgeButtonProps {

@@ -69,7 +69,6 @@ describe("AssignBill receipt breakdown", () => {
         <AssignBill
           friends={[]}
           onAddFriend={vi.fn()}
-          balances={[]}
           setBalances={vi.fn()}
           userName="Khang"
           setBills={vi.fn()}
@@ -89,7 +88,7 @@ describe("AssignBill receipt breakdown", () => {
   it("accumulates scanned receipt-level amounts and preserves an explicit zero total", () => {
     render(
       <CurrencyProvider>
-        <AssignBill friends={[]} onAddFriend={vi.fn()} balances={[]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
+        <AssignBill friends={[]} onAddFriend={vi.fn()} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
       </CurrencyProvider>,
     );
 
@@ -107,7 +106,7 @@ describe("AssignBill receipt breakdown", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(
       <CurrencyProvider>
-        <AssignBill friends={["Minh"]} onAddFriend={vi.fn()} balances={[{ id: 1, name: "Minh", balance: 25, history: [] }]} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
+        <AssignBill friends={["Minh"]} onAddFriend={vi.fn()} setBalances={vi.fn()} userName="Khang" setBills={vi.fn()} />
       </CurrencyProvider>,
     );
 

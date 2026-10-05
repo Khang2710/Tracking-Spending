@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Calendar, User, DollarSign, X, ChevronDown, ChevronUp, AlertCircle, Receipt } from "lucide-react";
+import { Calendar, User, X, Receipt } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { C, Card } from "../../App";
+import { Card } from "../../components/common/Card";
+import { C } from "../../design/tokens";
 import { SavedBill } from "./SplitScreen";
 import { useCurrency } from "../../context/CurrencyContext";
 import { formatAbsoluteCurrency } from "../../context/currencyAmounts";
