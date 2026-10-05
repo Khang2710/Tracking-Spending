@@ -52,6 +52,15 @@ describe("NewTransactionForm", () => {
     expect(screen.queryByRole("textbox", { name: "Note" })).not.toBeInTheDocument();
   });
 
+  it("stacks the date and wallet on narrow mobile screens", async () => {
+    await renderForm();
+
+    expect(screen.getByTestId("transaction-date-wallet-grid")).toHaveClass(
+      "grid-cols-1",
+      "sm:grid-cols-2",
+    );
+  });
+
   it("links the sheet footer Save action to the form", async () => {
     await renderForm();
     const save = screen.getByRole("button", { name: /save transaction/i });

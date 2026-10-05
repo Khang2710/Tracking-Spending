@@ -109,7 +109,7 @@ export function NewTransactionForm({ wallets, onSubmit }: NewTransactionFormProp
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div data-testid="transaction-date-wallet-grid" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={labelClassName}>
           {isVietnamese ? "Ngày giao dịch" : "Transaction date"}
           <input type="date" required value={date} onChange={(event) => setDate(event.target.value)} className={fieldClassName} />
