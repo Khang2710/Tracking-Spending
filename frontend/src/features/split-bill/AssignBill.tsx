@@ -1,28 +1,32 @@
 import { useState, useMemo } from "react";
 import { Plus, Trash2, ArrowUpRight, Banknote } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { C, Card } from "../../App";
+import { Card } from "../../components/common/Card";
+import { C } from "../../design/tokens";
 
 interface SplitItem {
   id: number;
   name: string;
   price: number;
+  discount: number;
   consumers: string[];
 }
 
 import { FriendBalanceItem, SavedBill } from "./SplitScreen";
-import { Transaction } from "../../App";
+import type { Transaction } from "../../types/finance";
 import { useCurrency } from "../../context/CurrencyContext";
+import { formatAbsoluteCurrency, getCurrencySymbol, toStoredAmount } from "../../context/currencyAmounts";
+import { MoneyInput } from "../../components/forms/MoneyInput";
+import { KeyboardSafeForm } from "../../components/mobile/KeyboardSafeForm";
 import { OcrScannerCard } from "./OcrScannerCard";
-import { OcrParsedItem } from "../../services/ocrService";
-import { toDisplayedSplitBillAmount, toStoredSplitBillAmount } from "./splitBillAmounts";
+import { OcrScanResult } from "../../services/ocrService";
+import { toDisplayedSplitBillAmount, toStoredOcrScanResult, toStoredSplitBillAmount } from "./splitBillAmounts";
 import { calculateSplitBill } from "./splitBillCalculator";
+import { removeDraftParticipant } from "./splitBillDraft";
 
 interface AssignBillProps {
   friends: string[];
   onAddFriend: (name: string) => void;
-  onRemoveFriend: (name: string) => void;
-  balances: FriendBalanceItem[];
   setBalances: React.Dispatch<React.SetStateAction<FriendBalanceItem[]>>;
   userName: string;
   setBills: React.Dispatch<React.SetStateAction<SavedBill[]>>;
@@ -32,71 +36,84 @@ interface AssignBillProps {
 export default function AssignBill({
   friends,
   onAddFriend,
-  onRemoveFriend,
-  balances,
   setBalances,
   userName,
   setBills,
   onAddTransaction,
 }: AssignBillProps) {
   const { t } = useTranslation();
-  const { formatCurrency, currency } = useCurrency();
+  const { currency } = useCurrency();
+  const formatCurrency = (amount: number) => formatAbsoluteCurrency(amount, currency);
+  const currencySymbol = getCurrencySymbol(currency);
   const [items, setItems] = useState<SplitItem[]>([]);
+  const [participants, setParticipants] = useState<string[]>(() => [...friends]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-  const [taxPercent, setTaxPercent] = useState<number>(0);
-  const [tip, setTip] = useState<number>(0);
+  const [tax, setTax] = useState<number | null>(0);
+  const [serviceCharge, setServiceCharge] = useState<number | null>(0);
+  const [tip, setTip] = useState<number | null>(0);
+  const [billDiscount, setBillDiscount] = useState<number | null>(0);
+  const [otherFees, setOtherFees] = useState<number | null>(0);
+  const [receiptTotal, setReceiptTotal] = useState<number | null>(null);
 
   const [newFriendName, setNewFriendName] = useState("");
   const [newItemName, setNewItemName] = useState("");
-  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState<number | null>(null);
   const [billTitle, setBillTitle] = useState("");
 
   const myName = userName || t("common.you");
   const [payer, setPayer] = useState("");
   const activePayer = payer || myName;
 
-  const handleItemsParsed = (parsedItems: OcrParsedItem[]) => {
-    let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-    const newSplitItems: SplitItem[] = parsedItems.map((item) => ({
-      id: nextId++,
-      name: item.name,
-      price: toStoredSplitBillAmount(item.price, currency),
-      consumers: [],
-    }));
-    setItems((prev) => [...prev, ...newSplitItems]);
+  const handleItemsParsed = (parsedResult: OcrScanResult) => {
+    const parsedResultInStorage = toStoredOcrScanResult(parsedResult, currency);
+    setItems((prev) => {
+      let nextId = Math.max(0, ...prev.map((item) => item.id)) + 1;
+      const newSplitItems: SplitItem[] = parsedResultInStorage.items.map((item) => ({
+        id: nextId++, name: item.name, price: item.price, discount: 0, consumers: [],
+      }));
+      return [...prev, ...newSplitItems];
+    });
+    setTax((previous) => (previous ?? 0) + parsedResultInStorage.tax);
+    setServiceCharge((previous) => (previous ?? 0) + parsedResultInStorage.serviceCharge);
+    setTip((previous) => (previous ?? 0) + parsedResultInStorage.tip);
+    setBillDiscount((previous) => (previous ?? 0) + parsedResultInStorage.billDiscount);
+    setOtherFees((previous) => (previous ?? 0) + parsedResultInStorage.otherFees);
+    setReceiptTotal((previous) => {
+      if (parsedResultInStorage.receiptTotal === null) return null;
+      return previous === null ? parsedResultInStorage.receiptTotal : previous + parsedResultInStorage.receiptTotal;
+    });
   };
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItemName.trim() || !newItemPrice) return;
-    const price = parseFloat(newItemPrice);
-    if (isNaN(price) || price < 0) return;
+    if (!newItemName.trim() || newItemPrice === null || newItemPrice < 0) return;
 
     const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
     setItems((prev) => [
       ...prev,
-      { id: nextId, name: newItemName.trim(), price: toStoredSplitBillAmount(price, currency), consumers: [] },
+      { id: nextId, name: newItemName.trim(), price: toStoredSplitBillAmount(newItemPrice, currency), discount: 0, consumers: [] },
     ]);
     setNewItemName("");
-    setNewItemPrice("");
+    setNewItemPrice(null);
   };
 
   const handleAddFriend = (e: React.FormEvent) => {
     e.preventDefault();
     const name = newFriendName.trim();
-    if (!name || friends.includes(name)) return;
+    const normalizedName = name.normalize("NFC").toLocaleLowerCase();
+    if (!name || participants.some((participant) => participant.normalize("NFC").toLocaleLowerCase() === normalizedName)) return;
     onAddFriend(name);
+    setParticipants((previous) => [...previous, name]);
     setNewFriendName("");
   };
 
   const handleRemoveFriend = (name: string) => {
-    onRemoveFriend(name);
-    setItems((prev) =>
-      prev.map((item) => ({
-        ...item,
-        consumers: item.consumers.filter((c) => c !== name),
-      }))
-    );
+    const result = removeDraftParticipant({ participants, items, payer: activePayer, myName, participant: name });
+    if (result.blocked) return;
+    if (result.requiresConfirmation && !window.confirm(t("split.removeParticipantConfirm", { name }))) return;
+    setParticipants(result.participants);
+    setItems(result.items);
+    setPayer(result.payer);
   };
 
   const handleRemoveItem = (id: number) => {
@@ -120,14 +137,24 @@ export default function AssignBill({
     );
   };
 
-  const { debts, subtotal, totalTax, grandTotal } = useMemo(() => {
+  const handleItemDiscountChange = (id: number, displayedDiscount: number | null) => {
+    setItems((prev) => prev.map((item) => item.id === id
+      ? { ...item, discount: Math.min(item.price, toStoredSplitBillAmount(Math.max(displayedDiscount ?? 0, 0), currency)) }
+      : item));
+  };
+
+  const { debts, subtotal, itemDiscountTotal, totalTax, grandTotal, receiptDifference } = useMemo(() => {
     return calculateSplitBill({
-      participants: [myName, ...friends],
+      participants: [myName, ...participants],
       items,
-      taxPercent,
-      tip,
+      tax: tax ?? 0,
+      serviceCharge: serviceCharge ?? 0,
+      tip: tip ?? 0,
+      billDiscount: billDiscount ?? 0,
+      otherFees: otherFees ?? 0,
+      receiptTotal,
     });
-  }, [items, friends, myName, taxPercent, tip]);
+  }, [items, participants, myName, tax, serviceCharge, tip, billDiscount, otherFees, receiptTotal]);
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -144,7 +171,7 @@ export default function AssignBill({
       const existingNames = new Set(prev.map((x) => x.name.normalize("NFC").trim().toLowerCase()));
       
       let updatedBalances = [...prev];
-      friends.forEach((f) => {
+      participants.forEach((f) => {
         const normF = f.normalize("NFC").trim();
         if (!existingNames.has(normF.toLowerCase())) {
           updatedBalances.push({
@@ -185,15 +212,16 @@ export default function AssignBill({
         }
 
         if (diff === 0) return fb;
+        const storedDiff = toStoredAmount(diff, currency);
 
         return {
           ...fb,
-          balance: fb.balance + diff,
+          balance: fb.balance + storedDiff,
           history: [
             {
               id: String(Date.now() + Math.random()),
               date: new Date().toLocaleDateString("vi-VN"),
-              amount: Math.abs(diff),
+              amount: Math.abs(storedDiff),
               description: desc,
               isLent,
               isSettled: false,
@@ -212,20 +240,30 @@ export default function AssignBill({
       payer: activePayer,
       items: items.map((i) => ({ ...i })),
       debts: debts.map((d) => ({ name: d.name, total: d.total })),
-      taxPercent,
-      tip,
+      tax: tax ?? 0,
+      serviceCharge: serviceCharge ?? 0,
+      tip: tip ?? 0,
+      billDiscount: billDiscount ?? 0,
+      otherFees: otherFees ?? 0,
+      currency,
+      receiptTotal,
     };
 
     setBills((prev) => [newBill, ...prev]);
 
     if (onAddTransaction) {
-      onAddTransaction({
-        name: `Split Bill: ${finalTitle}`,
-        amount: grandTotal,
-        category: "Food",
-        date: new Date().toISOString().split("T")[0],
-        walletId: 1,
-      });
+      const myShare = debts.find((debt) => debt.name.normalize("NFC").trim().toLowerCase() === myName.normalize("NFC").trim().toLowerCase())?.total ?? 0;
+      // A split bill is an expense for this user's own share only. Friends'
+      // shares stay solely in Running Balances, where repayment is tracked.
+      if (myShare > 0) {
+        onAddTransaction({
+          name: `Split Bill: ${finalTitle}`,
+          amount: -toStoredAmount(myShare, currency),
+          category: "Food",
+          date: new Date().toISOString().split("T")[0],
+          walletId: 1,
+        });
+      }
     }
 
     setShowSuccessToast(true);
@@ -233,8 +271,12 @@ export default function AssignBill({
       setShowSuccessToast(false);
       setItems([]);
       setSelectedItemId(null);
-      setTaxPercent(0);
+      setTax(0);
+      setServiceCharge(0);
       setTip(0);
+      setBillDiscount(0);
+      setOtherFees(0);
+      setReceiptTotal(null);
       setBillTitle("");
     }, 2500);
   };
@@ -243,7 +285,7 @@ export default function AssignBill({
 
   return (
     <>
-      <div className="px-5 md:px-0 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 pb-10">
+      <KeyboardSafeForm className="px-5 md:px-0 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 pb-10">
         {/* Left Column: OCR Scanner, Food Item List & Add Form, Friends List */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <OcrScannerCard onItemsParsed={handleItemsParsed} />
@@ -302,6 +344,9 @@ export default function AssignBill({
                           <p className="text-sm font-semibold text-[var(--paper-ink)] truncate">{item.name}</p>
                           <p className="text-xs text-tm font-mono mt-0.5">
                             {formatCurrency(item.price)}
+                            {item.discount > 0 && (
+                              <span className="ml-2 text-green font-semibold">−{formatCurrency(item.discount)}</span>
+                            )}
                             {hasConsumers && (
                               <span className="ml-2 text-tm/80">
                                 ({formatCurrency(item.price / item.consumers.length)} / {t("split.person") || "người"})
@@ -310,6 +355,23 @@ export default function AssignBill({
                           </p>
                         </div>
                       </div>
+
+                      {isSelected && (
+                        <div className="flex items-center gap-2 md:w-40 shrink-0" onClick={(event) => event.stopPropagation()}>
+                          <label htmlFor={`item-discount-${item.id}`} className="text-[10px] text-tm font-semibold whitespace-nowrap">
+                            {t("split.itemDiscount")}
+                          </label>
+                          <MoneyInput
+                            id={`item-discount-${item.id}`}
+                            placeholder="0"
+                            value={toDisplayedSplitBillAmount(item.discount, currency)}
+                            onValueChange={(value) => handleItemDiscountChange(item.id, value)}
+                            requiredAmount
+                            className="w-full min-w-0 px-2.5 py-1.5 rounded-lg border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
+                            style={{ borderColor: C.border }}
+                          />
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
                         {/* Consumer badges (Only show when specific consumers are selected) */}
@@ -335,8 +397,9 @@ export default function AssignBill({
                             handleRemoveItem(item.id);
                           }}
                           className="p-1.5 rounded-lg text-tm hover:text-red hover:bg-red/10 transition-colors"
+                          aria-label={t("split.removeItem", { name: item.name })}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={15} aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -348,7 +411,9 @@ export default function AssignBill({
             {/* Manual Item Add Form */}
             <form onSubmit={handleAddItem} className="flex gap-2.5">
               <input
+                id="split-item-name"
                 type="text"
+                aria-label={t("split.dishName")}
                 placeholder={t("split.dishPlaceholder")}
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
@@ -356,24 +421,26 @@ export default function AssignBill({
                 style={{ borderColor: C.border }}
               />
               <div className="relative w-32 md:w-40">
-                <input
-                  type="number"
-                  placeholder={t("split.pricePlaceholder")}
+                <MoneyInput
+                  id="split-item-price"
+                  aria-label={t("split.itemPrice", { currency })}
+                  placeholder={t("split.pricePlaceholder", { symbol: currencySymbol })}
                   value={newItemPrice}
-                  onChange={(e) => setNewItemPrice(e.target.value)}
+                  onValueChange={setNewItemPrice}
                   className="w-full px-4 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold pr-8"
                   style={{ borderColor: C.border }}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-tm font-bold">
-                  {currency === "VND" ? "₫" : "$"}
+                  {currencySymbol}
                 </span>
               </div>
               <button
                 type="submit"
                 className="w-10 h-10 rounded-xl font-bold flex items-center justify-center cursor-pointer transition-all hover:brightness-110 border-0 shadow-md shrink-0"
                 style={{ background: C.gold, color: C.bg }}
+                aria-label={t("split.addItem")}
               >
-                <Plus size={18} />
+                <Plus size={18} aria-hidden="true" />
               </button>
             </form>
           </Card>
@@ -390,19 +457,14 @@ export default function AssignBill({
             </div>
 
             <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border" style={{ borderColor: C.border, background: C.surf + "30" }}>
-              {[myName, ...friends].map((personName) => {
+              {[myName, ...participants].map((personName) => {
                 const isMe = personName === myName;
                 const isAssignedToSelected = selectedItem?.consumers.includes(personName);
 
                 return (
                   <div
                     key={personName}
-                    onClick={() => {
-                      if (selectedItemId !== null) {
-                        handleToggleConsumer(personName);
-                      }
-                    }}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-all ${
+                    className={`group flex items-center rounded-full border text-xs font-semibold transition-all ${
                       isAssignedToSelected ? "ring-1" : ""
                     }`}
                     style={{
@@ -411,22 +473,41 @@ export default function AssignBill({
                       color: C.white,
                     }}
                   >
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-[var(--paper-ink)] border"
-                      style={{ background: C.bg, borderColor: C.border }}
+                    <button
+                      type="button"
+                      onClick={() => selectedItemId !== null && handleToggleConsumer(personName)}
+                      aria-pressed={Boolean(isAssignedToSelected)}
+                      aria-label={t("split.toggleParticipant", { name: personName })}
+                      className="flex min-h-11 items-center gap-2 rounded-full border-0 bg-transparent py-1.5 pl-2.5 pr-2 text-xs font-semibold text-[var(--paper-ink)]"
                     >
-                      {getInitials(personName)}
-                    </div>
-                    <span>
-                      {personName} {isMe && `(${t("common.you")})`}
-                    </span>
+                      <span
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-[var(--paper-ink)] border"
+                        style={{ background: C.bg, borderColor: C.border }}
+                      >
+                        {getInitials(personName)}
+                      </span>
+                      <span>{personName} {isMe && `(${t("common.you")})`}</span>
+                    </button>
+                    {!isMe && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFriend(personName)}
+                        aria-label={t("split.removeParticipant", { name: personName })}
+                        title={t("split.removeParticipant", { name: personName })}
+                        className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-tm transition-colors hover:bg-red/10 hover:text-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
 
               {/* Inline Add Friend Input */}
               <form onSubmit={handleAddFriend} className="flex items-center gap-1.5">
+                <label htmlFor="split-add-friend" className="sr-only">{t("split.addFriend")}</label>
                 <input
+                  id="split-add-friend"
                   type="text"
                   placeholder={`+ ${t("split.addFriend")}`}
                   value={newFriendName}
@@ -448,10 +529,11 @@ export default function AssignBill({
 
             {/* Bill Title Input */}
             <div>
-              <label className="text-xs text-tm mb-1.5 block font-semibold">
+              <label htmlFor="split-bill-title" className="text-xs text-tm mb-1.5 block font-semibold">
                 {t("split.billTitle")}
               </label>
               <input
+                id="split-bill-title"
                 type="text"
                 placeholder={t("split.billTitlePlaceholder")}
                 value={billTitle}
@@ -463,50 +545,46 @@ export default function AssignBill({
 
             {/* Who Paid Select */}
             <div>
-              <label className="text-xs text-tm mb-1.5 block font-semibold">
+              <label htmlFor="split-bill-payer" className="text-xs text-tm mb-1.5 block font-semibold">
                 {t("split.whoPaid")}
               </label>
               <select
+                id="split-bill-payer"
                 value={activePayer}
                 onChange={(e) => setPayer(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
                 style={{ borderColor: C.border }}
               >
                 <option value={myName}>{myName} ({t("common.you")})</option>
-                {friends.map((f) => (
+                {participants.map((f) => (
                   <option key={f} value={f}>{f}</option>
                 ))}
               </select>
             </div>
 
-            {/* Tax & Tip Row */}
+            {/* Receipt adjustments: OCR fills these when present; every field stays editable. */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
-                  {t("split.tax")}
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={taxPercent || ""}
-                  onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-tm mb-1.5 block font-semibold">
-                  {t("split.tip", { symbol: currency === "VND" ? "đ" : "$" })}
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={tip ? toDisplayedSplitBillAmount(tip, currency) : ""}
-                  onChange={(e) => setTip(toStoredSplitBillAmount(parseFloat(e.target.value) || 0, currency))}
-                  className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
-                  style={{ borderColor: C.border }}
-                />
-              </div>
+              {[
+                { id: "tax", label: t("split.taxLabel"), value: tax, setValue: setTax, required: true },
+                { id: "service-charge", label: t("split.serviceCharge"), value: serviceCharge, setValue: setServiceCharge, required: true },
+                { id: "tip", label: t("split.tipGratuity"), value: tip, setValue: setTip, required: true },
+                { id: "bill-discount", label: t("split.billDiscount"), value: billDiscount, setValue: setBillDiscount, required: true },
+                { id: "other-fees", label: t("split.otherFees"), value: otherFees, setValue: setOtherFees, required: true },
+                { id: "receipt-total", label: t("split.receiptTotal"), value: receiptTotal, setValue: setReceiptTotal, required: false },
+              ].map(({ id, label, value, setValue, required }) => (
+                <div key={id}>
+                  <label htmlFor={`receipt-adjustment-${id}`} className="text-xs text-tm mb-1.5 block font-semibold">{label}</label>
+                  <MoneyInput
+                    id={`receipt-adjustment-${id}`}
+                    placeholder="0"
+                    value={value === null ? null : toDisplayedSplitBillAmount(value, currency)}
+                    onValueChange={(nextValue) => setValue(nextValue === null ? null : toStoredSplitBillAmount(nextValue, currency))}
+                    requiredAmount={required}
+                    className="w-full px-3 py-2 rounded-xl border text-xs text-[var(--paper-ink)] bg-surf outline-none focus:border-gold"
+                    style={{ borderColor: C.border }}
+                  />
+                </div>
+              ))}
             </div>
 
             {/* Debts Distribution List */}
@@ -520,8 +598,14 @@ export default function AssignBill({
                   <div key={d.name} className="flex justify-between items-center text-xs p-2.5 rounded-xl" style={{ background: C.surf + "30" }}>
                     <div className="flex flex-col">
                       <span className="text-[var(--paper-ink)] font-semibold">{d.name}</span>
-                      <span className="text-[10px] text-tm mt-0.5">
-                        {t("split.dishCost") || "Món"}: {formatCurrency(d.itemCost)} + {t("split.taxLabel") || "Thuế"}: {formatCurrency(d.tax)}
+                      <span className="text-[10px] text-tm mt-0.5 leading-relaxed">
+                        {t("split.breakdownItem")} {formatCurrency(d.itemCost)}
+                        {d.itemDiscount > 0 && ` − ${t("split.itemDiscount").toLocaleLowerCase()} ${formatCurrency(d.itemDiscount)}`}
+                        {d.billDiscount > 0 && ` − ${t("split.billDiscount").toLocaleLowerCase()} ${formatCurrency(d.billDiscount)}`}
+                        {d.tax > 0 && ` + ${t("split.taxLabel").toLocaleLowerCase()} ${formatCurrency(d.tax)}`}
+                        {d.serviceCharge > 0 && ` + ${t("split.serviceCharge").toLocaleLowerCase()} ${formatCurrency(d.serviceCharge)}`}
+                        {d.tip > 0 && ` + ${t("split.tipGratuity").toLocaleLowerCase()} ${formatCurrency(d.tip)}`}
+                        {d.otherFees > 0 && ` + ${t("split.otherFees").toLocaleLowerCase()} ${formatCurrency(d.otherFees)}`}
                       </span>
                     </div>
                     <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(d.total)}</span>
@@ -536,14 +620,13 @@ export default function AssignBill({
                 <span>{t("split.itemsSubtotal")}:</span>
                 <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-tm">
-                <span>{t("split.taxLabel")} ({taxPercent}%):</span>
-                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(totalTax)}</span>
-              </div>
-              <div className="flex justify-between text-tm">
-                <span>{t("split.flatTip")}:</span>
-                <span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(tip)}</span>
-              </div>
+              {itemDiscountTotal > 0 && <div className="flex justify-between text-green"><span>{t("split.itemDiscounts")}:</span><span className="font-mono font-bold">−{formatCurrency(itemDiscountTotal)}</span></div>}
+              {(billDiscount ?? 0) > 0 && <div className="flex justify-between text-green"><span>{t("split.billDiscount")}:</span><span className="font-mono font-bold">−{formatCurrency(billDiscount ?? 0)}</span></div>}
+              {totalTax > 0 && <div className="flex justify-between text-tm"><span>{t("split.taxLabel")}:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(totalTax)}</span></div>}
+              {(serviceCharge ?? 0) > 0 && <div className="flex justify-between text-tm"><span>{t("split.serviceCharge")}:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(serviceCharge ?? 0)}</span></div>}
+              {(tip ?? 0) > 0 && <div className="flex justify-between text-tm"><span>{t("split.tipGratuity")}:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(tip ?? 0)}</span></div>}
+              {(otherFees ?? 0) > 0 && <div className="flex justify-between text-tm"><span>{t("split.otherFees")}:</span><span className="font-mono font-bold text-[var(--paper-ink)]">{formatCurrency(otherFees ?? 0)}</span></div>}
+              {receiptTotal !== null && <div className={`flex justify-between ${receiptDifference === 0 ? "text-green" : "text-red"}`}><span>{receiptDifference === 0 ? t("split.receiptMatches") : t("split.receiptDifference")}:</span><span className="font-mono font-bold">{receiptDifference === 0 ? formatCurrency(receiptTotal) : formatCurrency(Math.abs(receiptDifference ?? 0))}</span></div>}
 
               <div className="flex justify-between text-sm font-bold text-[var(--paper-ink)] pt-2.5 border-t items-center" style={{ borderColor: C.border }}>
                 <span className="flex items-center gap-1">
@@ -571,7 +654,7 @@ export default function AssignBill({
             )}
           </Card>
         </div>
-      </div>
+      </KeyboardSafeForm>
     </>
   );
 }

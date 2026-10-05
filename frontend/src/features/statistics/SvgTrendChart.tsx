@@ -22,7 +22,7 @@ export function SvgTrendChart({ data, formatValue = (value) => value.toLocaleStr
     ];
     return (
       <div role="img" aria-label="Income, spending, and savings trend" className="flex h-full w-full flex-col justify-center gap-5">
-        {focusedSeries.map((series, index) => {
+        {focusedSeries.map((series) => {
           const value = datum[series.key];
           const width = value === 0 ? 0 : Math.max(2, (value / maximum) * 100);
           return <div key={series.key} className="grid grid-cols-[76px_minmax(0,1fr)_72px] items-center gap-3 sm:grid-cols-[96px_minmax(0,1fr)_88px] sm:gap-4">

@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "../../context/CurrencyContext";
-import { Transaction, Wallet, categoryIcons } from "../../App";
+import { categoryIcons } from "../transactions/categories";
+import type { Transaction, Wallet } from "../../types/finance";
 
 interface CashFlowCalendarProps {
   transactions: Transaction[];

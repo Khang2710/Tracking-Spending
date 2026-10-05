@@ -1,11 +1,12 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "@tracking-spending/frontend",
   "private": true,
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "dev:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -40,23 +41,6 @@
     "typescript": "^7.0.2",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"
-  },
-  "peerDependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
-  },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.3.5"
-    }
   },
   "allowScripts": {
     "@tailwindcss/oxide@4.1.12": true,

@@ -1,24 +1,26 @@
 import React, { useRef, useState } from "react";
-import { Sparkles, Camera, Loader2 } from "lucide-react";
+import { Sparkles, Camera, ImagePlus, Loader2, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { C } from "../../App";
-import { processReceiptOcr, OcrParsedItem } from "../../services/ocrService";
+import { C } from "../../design/tokens";
+import { processReceiptOcr, type OcrScanResult } from "../../services/ocrService";
 import { compressImage } from "../../utils/imageCompressor";
 
 interface OcrScannerCardProps {
-  onItemsParsed: (items: OcrParsedItem[]) => void;
+  onItemsParsed: (result: OcrScanResult) => void;
 }
 
 export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrLoadingText, setOcrLoadingText] = useState("");
   const [ocrError, setOcrError] = useState("");
+  const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false);
 
   const handleCancel = () => {
     if (abortControllerRef.current) {
@@ -32,6 +34,7 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    if (libraryInputRef.current) libraryInputRef.current.value = "";
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +71,7 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
         setOcrProgress(30);
         setOcrLoadingText(t("split.aiAnalyzing", "Analyzing receipt..."));
 
-        const items = await processReceiptOcr({
+        const result = await processReceiptOcr({
           pureBase64,
           mimeType,
           signal,
@@ -88,8 +91,8 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
           },
         });
 
-        if (!signal.aborted && items && items.length > 0) {
-          onItemsParsed(items);
+        if (!signal.aborted && result.items.length > 0) {
+          onItemsParsed(result);
         }
       }
     } catch (err: any) {
@@ -107,6 +110,7 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
+        if (libraryInputRef.current) libraryInputRef.current.value = "";
       }
     }
   };
@@ -125,6 +129,13 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
           type="file"
           accept="image/*"
           capture="environment"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        <input
+          ref={libraryInputRef}
+          type="file"
+          accept="image/*"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -149,7 +160,7 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
 
           <motion.button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setIsSourcePickerOpen(true)}
             disabled={isExtracting}
             whileTap={{ scale: 0.95 }}
             className="px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 font-sans border-0 shadow-lg shrink-0"
@@ -165,6 +176,16 @@ export function OcrScannerCard({ onItemsParsed }: OcrScannerCardProps) {
           </p>
         )}
       </div>
+
+      {isSourcePickerOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label={t("split.receiptSource", "Choose receipt source")}>
+          <div className="w-full max-w-sm rounded-[24px] bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between"><h3 className="text-base font-extrabold text-[var(--paper-ink)]">{t("split.receiptSource", "Choose receipt source")}</h3><button type="button" onClick={() => setIsSourcePickerOpen(false)} aria-label={t("common.close", "Close")} className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--paper-canvas)] text-[var(--paper-ink)]"><X size={18} aria-hidden="true" /></button></div>
+            <p className="mb-4 text-xs font-medium text-[var(--paper-muted)]">{t("split.receiptSourceHint", "Take a new photo or choose an existing receipt image.")}</p>
+            <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => { setIsSourcePickerOpen(false); fileInputRef.current?.click(); }} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--paper-ink)] px-3 text-sm font-bold text-white"><Camera size={22} aria-hidden="true" />{t("split.takePhoto", "Take photo")}</button><button type="button" onClick={() => { setIsSourcePickerOpen(false); libraryInputRef.current?.click(); }} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-3 text-sm font-bold text-[var(--paper-ink)]"><ImagePlus size={22} aria-hidden="true" />{t("split.chooseFromLibrary", "Choose from library")}</button></div>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen AI Scanning Loading Modal Overlay */}
       <AnimatePresence>

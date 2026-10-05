@@ -8,7 +8,6 @@ import { HomeScreen } from "./HomeScreen";
 const callbacks = {
   onEditBudget: vi.fn(),
   onAddTransaction: vi.fn(),
-  onScanReceipt: vi.fn(),
   onAddWallet: vi.fn(),
   onEditWallet: vi.fn(),
   onEditTransaction: vi.fn(),
@@ -24,7 +23,7 @@ function renderHome(overrides: Partial<React.ComponentProps<typeof HomeScreen>> 
           { id: 2, label: "Tiền mặt", balance: 1_200_000, accent: "#A9B8A0" },
         ]}
         transactions={[
-          { id: 1, name: "Cà phê sáng", date: "2026-09-22", amount: -45_000, category: "Drinks", walletId: 2 },
+          { id: 1, name: "Cà phê sáng", date: "2026-09-22", amount: -45_000, category: "Drinks", walletId: 2, note: null },
         ]}
         budget={12_000_000}
         now={new Date(2026, 8, 22)}

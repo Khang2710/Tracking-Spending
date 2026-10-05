@@ -5,6 +5,16 @@ export interface OcrParsedItem {
   price: number;
 }
 
+export interface OcrScanResult {
+  items: OcrParsedItem[];
+  tax: number;
+  serviceCharge: number;
+  tip: number;
+  billDiscount: number;
+  otherFees: number;
+  receiptTotal: number | null;
+}
+
 export interface ProcessReceiptOptions {
   pureBase64: string;
   mimeType: string;
@@ -36,12 +46,12 @@ export async function processReceiptOcr({
   mimeType,
   signal,
   onProgress,
-}: ProcessReceiptOptions): Promise<OcrParsedItem[]> {
+}: ProcessReceiptOptions): Promise<OcrScanResult> {
   onProgress?.(25, "AI Proxy OCR");
 
   try {
     const data = await withTimeout(
-      (requestSignal) => apiRequest<unknown[]>("/api/ocr", {
+      (requestSignal) => apiRequest<unknown>("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: pureBase64, mimeType }),
@@ -50,12 +60,12 @@ export async function processReceiptOcr({
       35_000,
       signal,
     );
-    if (!Array.isArray(data)) {
+    if (typeof data !== "object" || data === null || !("items" in data) || !Array.isArray(data.items)) {
       onProgress?.(100, "Finished");
-      return [];
+      return emptyOcrScanResult();
     }
 
-    const items = data.filter(
+    const items = data.items.filter(
       (item): item is OcrParsedItem =>
         typeof item === "object" &&
         item !== null &&
@@ -64,9 +74,31 @@ export async function processReceiptOcr({
     );
 
     onProgress?.(100, items.length > 0 ? "Success" : "Finished");
-    return items;
+    return {
+      items,
+      tax: readAmount(data, "tax"),
+      serviceCharge: readAmount(data, "serviceCharge"),
+      tip: readAmount(data, "tip"),
+      billDiscount: readAmount(data, "billDiscount"),
+      otherFees: readAmount(data, "otherFees"),
+      receiptTotal: readNullableAmount(data, "receiptTotal"),
+    };
   } catch (error) {
     onProgress?.(100, "Finished");
     throw error;
   }
+}
+
+function emptyOcrScanResult(): OcrScanResult {
+  return { items: [], tax: 0, serviceCharge: 0, tip: 0, billDiscount: 0, otherFees: 0, receiptTotal: null };
+}
+
+function readAmount(data: Record<string, unknown>, key: string): number {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function readNullableAmount(data: Record<string, unknown>, key: string): number | null {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }

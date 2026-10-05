@@ -18,7 +18,6 @@ export interface HomeScreenProps {
   now?: Date;
   onEditBudget: () => void;
   onAddTransaction: () => void;
-  onScanReceipt: () => void;
   onAddWallet: () => void;
   onEditWallet: (wallet: Wallet) => void;
   onEditTransaction: (transaction: Transaction) => void;
@@ -35,7 +34,6 @@ export function HomeScreen({
   now = new Date(),
   onEditBudget,
   onAddTransaction,
-  onScanReceipt,
   onAddWallet,
   onEditWallet,
   onEditTransaction,

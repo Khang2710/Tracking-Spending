@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, CheckCircle2, ChevronRight, X, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import confetti from "canvas-confetti";
-import { C, Card } from "../../App";
+import { Card } from "../../components/common/Card";
+import { C } from "../../design/tokens";
 import { NudgeButton } from "../../components/common/NudgeButton";
 import { useCurrency } from "../../context/CurrencyContext";
 
@@ -26,18 +27,14 @@ interface FriendBalanceItem {
 interface DebtBalancesProps {
   balances: FriendBalanceItem[];
   setBalances: React.Dispatch<React.SetStateAction<FriendBalanceItem[]>>;
-  onRemoveFriend: (name: string) => void;
   onSettleTransaction: (friendName: string, transactionId: string) => void;
 }
 
 export default function DebtBalances({
   balances,
   setBalances,
-  onRemoveFriend,
   onSettleTransaction,
 }: DebtBalancesProps) {
-  const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
   const [selectedFriend, setSelectedFriend] = useState<FriendBalanceItem | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
@@ -230,8 +227,6 @@ function DebtDetailModal({
   const { formatCurrency } = useCurrency();
   const isLent = friend.balance > 0;
   const isSettled = friend.balance === 0;
-  const absBalance = Math.abs(friend.balance);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}

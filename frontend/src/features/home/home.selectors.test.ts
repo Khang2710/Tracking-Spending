@@ -7,10 +7,10 @@ import {
 } from "./home.selectors";
 
 const transactions: Transaction[] = [
-  { id: 1, name: "Rent", date: "2026-09-02", amount: -600, category: "Housing", walletId: 1 },
-  { id: 2, name: "Salary", date: "2026-09-03", amount: 2_000, category: "Salary", walletId: 1 },
-  { id: 3, name: "Coffee", date: "2026-09-20", amount: -40, category: "Drinks", walletId: 1 },
-  { id: 4, name: "Old expense", date: "2026-08-20", amount: -500, category: "Others", walletId: 1 },
+  { id: 1, name: "Rent", date: "2026-09-02", amount: -600, category: "Housing", walletId: 1, note: null },
+  { id: 2, name: "Salary", date: "2026-09-03", amount: 2_000, category: "Salary", walletId: 1, note: null },
+  { id: 3, name: "Coffee", date: "2026-09-20", amount: -40, category: "Drinks", walletId: 1, note: null },
+  { id: 4, name: "Old expense", date: "2026-08-20", amount: -500, category: "Others", walletId: 1, note: null },
 ];
 
 describe("getMonthlyBudgetSummary", () => {

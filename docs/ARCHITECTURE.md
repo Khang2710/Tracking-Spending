@@ -20,7 +20,7 @@ Supabase PostgreSQL + RLS + transaction RPCs
 
 ## Frontend boundary
 
-[main.tsx](../frontend/src/main.tsx) installs authentication and display-currency providers before rendering [App.tsx](../frontend/src/App.tsx). UI logic is grouped under `frontend/src/features`.
+[main.tsx](../frontend/src/main.tsx) installs authentication and display-currency providers before rendering [App.tsx](../frontend/src/App.tsx). `App.tsx` is the screen/modal composition root; cloud bootstrap, legacy import, derived totals, and finance mutations live in `features/finance-data/useFinanceWorkspace.ts`. UI logic is grouped by domain under `frontend/src/features`.
 
 [apiClient.ts](../frontend/src/services/apiClient.ts) is the authenticated backend boundary. It reads the current Supabase session immediately before each request and sends the access token in the `Authorization` header. Feature code does not store or manually pass tokens.
 
@@ -32,7 +32,9 @@ The browser may read only `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, 
 
 [finance.repository.ts](../backend/src/modules/finance/finance.repository.ts) creates a Supabase client carrying the user's JWT. All table queries and transaction RPCs therefore remain subject to the existing RLS policies. A service-role key is not used for normal user requests.
 
-Core endpoints cover workspace loading, wallets, transactions, monthly budgets, and savings goals. Transaction mutations use the existing database RPCs so transaction rows and wallet balances change atomically.
+Core endpoints cover workspace loading, wallets, transactions, monthly budgets, savings goals, and recurring expenses. Transaction mutations and recurring payment confirmation use database RPCs so transaction rows and wallet balances change atomically.
+
+Split Bills currently keep draft friends, bill history, and running balances in scoped browser storage. The database tables and RLS policies already exist, but the authenticated API migration has not been completed yet. Do not clear those browser keys during generic UI recovery.
 
 ## Receipt OCR
 
@@ -42,7 +44,7 @@ The backend tries configured providers in order: Groq, then OpenRouter. It norma
 
 ## Internationalization and currency
 
-Translation resources live under `frontend/src/locales`. User language and base-currency preferences are persisted in Supabase. Monetary values remain in the user's base currency; `CurrencyContext` handles display conversion and formatting.
+Translation resources live under `frontend/src/locales`. User language and display-currency preferences are persisted in Supabase. Finance values use the existing canonical VND storage representation; `CurrencyContext` and `currencyAmounts.ts` convert user input and output at the UI boundary. Components must not hard-code symbols or conversion rules.
 
 ## Verification boundaries
 
@@ -51,6 +53,9 @@ Translation resources live under `frontend/src/locales`. User language and base-
 - Supabase RLS/RPC verification: `supabase/tests` and `supabase/verification`
 - Complete local verification: root `npm run check`
 
-## Planned next migration
+## Planned next migrations
 
-Preferences, recurring-expense persistence, split-bill persistence, and dedicated statistics endpoints will move behind the same authenticated backend boundary. Their current UI behavior remains intact while the core finance path is migrated and verified.
+- Move Split Bills history and running balances from browser storage to the existing Supabase tables through an idempotent authenticated API migration.
+- Replace full-workspace reloads after each mutation with scoped responses and a client query cache.
+- Add paginated transaction history and dedicated statistics aggregates so workspace loading does not scan all historical transactions.
+- Move profile/display-name persistence behind the same backend boundary; profile preference writes currently use the user's RLS-protected Supabase client directly.
