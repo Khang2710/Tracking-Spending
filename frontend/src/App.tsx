@@ -6,8 +6,6 @@ import {
   TrendingUp,
   Plus,
   ChevronRight,
-  Download,
-  Search,
   CreditCard,
   House,
   Car,
@@ -24,7 +22,6 @@ import {
   Percent,
   ArrowUpRight,
   ArrowDownRight,
-  PieChart,
   Edit2,
   Settings,
   Loader2,
@@ -33,19 +30,37 @@ import {
   ShoppingBasket,
   Calendar,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import confetti from "canvas-confetti";
 import SplitScreen from "./features/split-bill/SplitScreen";
 import CashFlowCalendar from "./features/statistics/CashFlowCalendar";
 import { Drawer } from "vaul";
 import { useTranslation } from "react-i18next";
+import { supabase } from "./lib/supabase";
+import { HomeScreen as PaperHomeScreen } from "./features/home/HomeScreen";
+import { AppShell } from "./layout/AppShell";
+import type { AppDestination } from "./layout/navigation";
+import type { RecurringExpense } from "./features/recurring-expenses/recurring.types";
+import { advanceMonthlyDueDate, getUpcomingOccurrences } from "./features/recurring-expenses/recurring.schedule";
+import { RecurringExpensesSettings } from "./features/recurring-expenses/RecurringExpensesSettings";
+import { MonthSelector } from "./features/statistics/MonthSelector";
+import { MonthlyStatisticsDashboard } from "./features/statistics/MonthlyStatisticsDashboard";
+import { useAuth } from "./features/auth/AuthProvider";
+import { AppLoadingScreen } from "./components/common/AppLoadingScreen";
+import {
+  createCloudSavingsGoal,
+  createCloudTransaction,
+  createCloudWallet,
+  deleteCloudSavingsGoal,
+  deleteCloudTransaction,
+  deleteCloudWallet,
+  loadCloudFinance,
+  saveCloudBudget,
+  updateCloudSavingsGoal,
+  updateCloudTransaction,
+  updateCloudWallet,
+} from "./features/finance-data/finance.repository";
+import { emptyCloudFinance } from "./features/finance-data/cloudWorkspaceState";
+import { classifyTransactionCategory } from "./features/transactions/categoryClassifier";
 
 export interface SavingsGoal {
   id: number;
@@ -60,20 +75,20 @@ export interface SavingsGoal {
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 export const C = {
-  bg: "#0F0F10",
-  sec: "#17171A",
-  card: "#1E1E21",
-  surf: "#242428",
-  gold: "#C9A45B",
-  goldL: "#E2C77A",
-  high: "#F3D98B",
-  purple: "#8B5CF6",
-  green: "#3DDC84",
-  red: "#FF6B6B",
-  white: "#FFFFFF",
-  t2: "#B8B8B8",
-  tm: "#8A8A8A",
-  border: "rgba(255,255,255,0.07)",
+  bg: "#F4F3EF",
+  sec: "#ECEBE5",
+  card: "#FFFFFF",
+  surf: "#F0EFEA",
+  gold: "#171A16",
+  goldL: "#30352E",
+  high: "#191B17",
+  purple: "#746783",
+  green: "#4F7D62",
+  red: "#A75D4D",
+  white: "#191B17",
+  t2: "#4F534D",
+  tm: "#74786F",
+  border: "rgba(25,27,23,0.10)",
 } as const;
 
 // ─── Interfaces & Mappings ──────────────────────────────────────────────────
@@ -163,11 +178,9 @@ export function Card({
     <div
       className={`rounded-2xl transition-all duration-300 ${className}`}
       style={{
-        background: "linear-gradient(145deg, rgba(26, 26, 30, 0.8) 0%, rgba(18, 18, 22, 0.95) 100%)",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)",
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        boxShadow: "0 14px 45px rgba(42, 45, 39, 0.055)",
         ...style,
       }}
       onClick={onClick}
@@ -250,85 +263,6 @@ function SectionHeader({
           {actionLabel === "See All" && <ChevronRight size={13} strokeWidth={2.5} />}
         </button>
       )}
-    </div>
-  );
-}
-
-function MonthSelector({
-  selected,
-  onChange,
-}: {
-  selected: number;
-  onChange: (i: number) => void;
-}) {
-  const currentYear = new Date().getFullYear();
-  return (
-    <div
-      className="flex rounded-2xl p-1 overflow-x-auto hide-scroll"
-      style={{ background: C.card, border: `1px solid ${C.border}` }}
-    >
-      {months.map((m, i) => (
-        <button
-          key={m}
-          onClick={() => onChange(i)}
-          className="flex-1 min-w-[55px] py-2 rounded-xl flex flex-col items-center transition-all duration-300 border-0 cursor-pointer"
-          style={{
-            background: selected === i ? C.gold : "transparent",
-            color: selected === i ? C.bg : C.tm,
-          }}
-        >
-          <span
-            className="text-[9px] font-medium opacity-60 leading-none mb-0.5"
-            style={{ color: selected === i ? C.bg : C.tm }}
-          >
-            {currentYear}
-          </span>
-          <span
-            className="text-[12px] font-semibold"
-            style={{ color: selected === i ? C.bg : C.tm }}
-          >
-            {m}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
-function CustomTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { color: string; value: number; name: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div
-      className="rounded-2xl p-3 text-xs"
-      style={{
-        background: C.surf,
-        border: `1px solid ${C.border}`,
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <p className="font-semibold mb-2" style={{ color: C.t2 }}>
-        {label}
-      </p>
-      {payload.map((p) => (
-        <div key={p.name} className="flex items-center gap-2 mb-1">
-          <div
-            className="w-2 h-2 rounded-full"
-            style={{ background: p.color }}
-          />
-          <span style={{ color: C.white }}>
-            ${p.value.toLocaleString()}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -439,7 +373,7 @@ function HomeScreen({
   const pctSpent = Math.min(Math.round(rawBudgetPct), 100);
   const overAmount = Math.max(0, totalCurrentOutcome - budget);
 
-  let progressColor = C.gold;
+  let progressColor: string = C.gold;
   if (rawBudgetPct >= 100) {
     progressColor = "#EF4444";
   } else if (rawBudgetPct >= 80) {
@@ -759,7 +693,7 @@ function HomeScreen({
                           style={{ background: C.gold + "22" }}
                           whileHover={{ scale: 1.15, background: C.gold + "44" }}
                           whileTap={{ scale: 0.9 }}
-                          title={t("common.edit", "Sửa")}
+                          title={t("common.edit")}
                         >
                           <Edit2 size={11} color={C.gold} strokeWidth={2.5} />
                         </motion.button>
@@ -769,7 +703,7 @@ function HomeScreen({
                           style={{ background: "#FF453A22" }}
                           whileHover={{ scale: 1.15, background: "#FF453A44" }}
                           whileTap={{ scale: 0.9 }}
-                          title={t("common.delete", "Xóa")}
+                          title={t("common.delete")}
                         >
                           <Trash2 size={11} color="#FF453A" strokeWidth={2.5} />
                         </motion.button>
@@ -881,25 +815,13 @@ function StatisticsScreen({
   return (
     <div className="flex flex-col">
       {/* Mobile Header (Hidden on Desktop) */}
-      <div className="px-5 pt-12 pb-5 flex items-center justify-between md:hidden">
+      <div className="px-5 pt-2 pb-5 md:hidden">
         <h1
           className="text-[22px] font-bold tracking-tight"
           style={{ color: C.white }}
         >
           Statistics
         </h1>
-        <div className="flex items-center gap-2">
-          {[Download, Search].map((Icon, i) => (
-            <motion.button
-              key={i}
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: C.card, border: `1px solid ${C.border}` }}
-              whileTap={{ scale: 0.94 }}
-            >
-              <Icon size={16} color={C.t2} strokeWidth={2} />
-            </motion.button>
-          ))}
-        </div>
       </div>
 
       {/* Segmented Switcher */}
@@ -909,9 +831,9 @@ function StatisticsScreen({
           style={{ background: C.card, border: `1px solid ${C.border}` }}
         >
           {[
-            { id: 0, label: t("stats.tabStats", "Thống kê"), icon: BarChart2 },
-            { id: 1, label: t("stats.tabCashFlow", "Lịch dòng tiền"), icon: Calendar },
-            { id: 2, label: t("stats.tabSavings", "Hũ tiết kiệm"), icon: PiggyBank },
+            { id: 0, label: t("stats.tabStats"), shortLabel: t("stats.tabStats"), icon: BarChart2 },
+            { id: 1, label: t("stats.tabCashFlow"), shortLabel: t("stats.tabCashFlowShort"), icon: Calendar },
+            { id: 2, label: t("stats.tabSavings"), shortLabel: t("stats.tabSavingsShort"), icon: PiggyBank },
           ].map((tab) => {
             const IconComp = tab.icon;
             const isActive = statsSubTab === tab.id;
@@ -921,15 +843,16 @@ function StatisticsScreen({
                 type="button"
                 onClick={() => setStatsSubTab(tab.id)}
                 whileTap={{ scale: 0.97 }}
-                className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative"
+                className="flex-1 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 text-[11px] sm:text-[13px] font-semibold transition-all duration-200 cursor-pointer text-center relative whitespace-nowrap min-w-0"
                 style={{
                   background: isActive ? C.gold : "transparent",
                   color: isActive ? C.bg : C.tm,
                   boxShadow: isActive ? "0 2px 10px rgba(201, 164, 91, 0.25)" : "none",
                 }}
               >
-                <IconComp size={15} strokeWidth={2.2} />
-                <span>{tab.label}</span>
+                <IconComp size={14} strokeWidth={2.2} className="shrink-0" />
+                <span className="truncate sm:hidden">{tab.shortLabel}</span>
+                <span className="hidden truncate sm:inline">{tab.label}</span>
               </motion.button>
             );
           })}
@@ -962,233 +885,28 @@ function StatisticsScreen({
       )}
 
       {statsSubTab === 0 && (
-      <div className="px-5 md:px-0 flex flex-col md:grid md:grid-cols-12 gap-5 md:gap-8 pb-6">
-        {/* Left Column: Chart & Month Selector */}
-        <div className="flex flex-col gap-5 md:gap-8 md:col-span-8">
-          {/* Month Selector */}
-          <MonthSelector selected={selectedMonth} onChange={setSelectedMonth} />
-
-          {/* Chart Card */}
-          <motion.div whileHover={{ scale: 1.005 }} transition={{ type: "spring", stiffness: 300 }}>
-            <Card className="p-4 md:p-6">
-              <div className="h-52 md:h-96">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={computedChartData}
-                    margin={{ top: 4, right: 4, bottom: 0, left: -22 }}
-                  >
-                    <defs>
-                      <linearGradient id="gIncome" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={C.green} stopOpacity={0.28} />
-                        <stop
-                          offset="95%"
-                          stopColor={C.green}
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient id="gOutcome" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={C.red} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={C.red} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="gSavings" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={C.gold} stopOpacity={0.28} />
-                        <stop offset="95%" stopColor={C.gold} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="m"
-                      tick={{ fill: C.tm, fontSize: 11, fontWeight: 500 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: C.tm, fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v) => `${v / 1000}k`}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="income"
-                      stroke={C.green}
-                      strokeWidth={2}
-                      fill="url(#gIncome)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: C.green, strokeWidth: 0 }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="outcome"
-                      stroke={C.red}
-                      strokeWidth={2}
-                      fill="url(#gOutcome)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: C.red, strokeWidth: 0 }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="savings"
-                      stroke={C.gold}
-                      strokeWidth={2}
-                      fill="url(#gSavings)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: C.gold, strokeWidth: 0 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Legend Row */}
-              <div
-                className="flex items-center justify-around md:justify-start md:gap-12 mt-4 pt-4"
-                style={{ borderTop: `1px solid ${C.border}` }}
-              >
-                {[
-                  { label: t("stats.income"), value: formatCurrency(activeMonthData.income), color: C.green },
-                  { label: t("stats.outcome"), value: formatCurrency(activeMonthData.outcome), color: C.red },
-                  { label: t("stats.savings"), value: formatCurrency(activeMonthData.savings), color: C.gold },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex flex-col items-center md:items-start gap-1"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{ background: item.color }}
-                      />
-                      <span
-                        className="text-[12px] font-medium"
-                        style={{ color: C.tm }}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                    <span
-                      className="text-[15px] md:text-[18px] font-bold"
-                      style={{ color: C.white }}
-                    >
-                      {item.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Monthly Budget */}
-          <motion.div whileHover={{ scale: 1.01 }}>
-            <Card className="p-4 md:p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span
-                  className="text-[17px] font-semibold"
-                  style={{ color: C.white }}
-                >
-                  {t("stats.monthlyBudget")}
-                </span>
-                <span
-                  className="text-[13px] font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: C.gold + "22", color: C.gold }}
-                >
-                  {pctSpent}%
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1 mb-3">
-                <span
-                  className="text-[22px] md:text-[28px] font-bold"
-                  style={{ color: C.gold }}
-                >
-                  {formatCurrency(totalMonthOutcome)}
-                </span>
-                <span className="text-[14px] md:text-[16px]" style={{ color: C.tm }}>
-                  / {formatCurrency(budget)}
-                </span>
-              </div>
-              <ProgressBar value={totalMonthOutcome} max={budget} color={C.gold} delay={0.1} />
-              <p className="text-[12px] md:text-[14px] mt-3" style={{ color: C.tm }}>
-                {t("stats.dailyLimit")}: {formatCurrency(budget / 30)} ·{" "}
-                <span style={{ color: C.green, fontWeight: 600 }}>
-                  {t("stats.saved")} {formatCurrency(saved)}
-                </span>
-              </p>
-            </Card>
-          </motion.div>
+        <div className="space-y-4 px-4 pb-6 sm:px-5 md:px-0">
+          <MonthSelector selected={selectedMonth} onChange={setSelectedMonth} months={months} year={new Date().getFullYear()} />
+          <MonthlyStatisticsDashboard
+            monthLabel={new Date(new Date().getFullYear(), selectedMonth, 1).toLocaleString(undefined, { month: "long" })}
+            monthShortLabel={months[selectedMonth]}
+            year={new Date().getFullYear()}
+            income={activeMonthData.income}
+            spending={activeMonthData.outcome}
+            savings={activeMonthData.savings}
+            budget={budget}
+            budgetPercent={pctSpent}
+            dailyLimit={budget / 30}
+            savedBudget={saved}
+            transactionCount={monthTransactions.length}
+            averageExpense={monthTotalExpenses > 0 ? monthTotalExpenses / monthTransactions.filter((transaction) => transaction.amount < 0).length : 0}
+            categories={sortedCategories.map(({ name, amount, pct, color }) => ({ name, amount, pct, color }))}
+            formatCurrency={formatCurrency}
+            copy={{
+              monthlyBreakdown: t("stats.monthlyBreakdown"), netBalance: t("stats.netBalance"), income: t("stats.income"), spending: t("stats.outcome"), savings: t("stats.savings"), spendingFocus: t("stats.spendingFocus"), whereMoneyWent: t("stats.mostMoneyGoesTo"), spendingPercent: t("stats.spendingPercent"), monthlySnapshot: t("stats.monthlySnapshot"), quietMonth: t("stats.quietMonth"), transactions: t("stats.transactions"), averageExpense: t("stats.averageExpense"), monthlyBudget: t("stats.monthlyBudget"), dailyLimit: t("stats.dailyLimit"), saved: t("stats.saved"), atAGlance: t("stats.atAGlance"), savingsRate: t("stats.savingsRate"), categories: t("stats.categories"), noExpenses: t("stats.noExpenses"),
+            }}
+          />
         </div>
-
-        {/* Right Column: Spending Categories */}
-        <div className="md:col-span-4">
-          <h3
-            className="text-[17px] font-semibold mb-4"
-            style={{ color: C.white }}
-          >
-            {t("stats.mostMoneyGoesTo")}
-          </h3>
-          <div className="flex flex-col gap-3 md:gap-4">
-            {sortedCategories.length === 0 ? (
-              <div
-                className="flex flex-col items-center justify-center p-8 text-center text-sm rounded-2xl border"
-                style={{ color: C.tm, background: C.card, borderColor: C.border }}
-              >
-                <PieChart size={32} color={C.tm} className="opacity-50 mb-3" />
-                {t("stats.noExpenses")}
-              </div>
-            ) : (
-              sortedCategories.map((cat, i) => (
-                <motion.div
-                  key={cat.name}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 + i * 0.08 }}
-                  whileHover={{ x: 4 }}
-                >
-                  <Card className="p-4 md:p-5 group cursor-pointer transition-all">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-                        style={{ background: cat.color + "1a" }}
-                      >
-                        <cat.Icon
-                          size={18}
-                          color={cat.color}
-                          strokeWidth={2}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span
-                            className="text-[15px] font-semibold"
-                            style={{ color: C.white }}
-                          >
-                            {cat.name}
-                          </span>
-                          <span
-                            className="text-[15px] font-bold"
-                            style={{ color: C.red }}
-                          >
-                            -{formatCurrency(Math.abs(cat.amount))}
-                          </span>
-                        </div>
-                        <span
-                          className="text-[12px]"
-                          style={{ color: C.tm }}
-                        >
-                          {cat.pct}% {t("stats.spendingPercent")}
-                        </span>
-                      </div>
-                    </div>
-                    <ProgressBar
-                      value={cat.pct}
-                      max={100}
-                      color={cat.color}
-                      delay={0.3 + i * 0.1}
-                    />
-                  </Card>
-                </motion.div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
       )}
     </div>
   );
@@ -1227,6 +945,7 @@ function SavingsGoalCard({
   onClick: (g: SavingsGoal) => void;
 }) {
   const { formatCurrency } = useCurrency();
+  const { t } = useTranslation();
   const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
   const targetAmount = typeof goal?.targetAmount === "number" ? goal.targetAmount : Number(goal?.targetAmount) || 0;
   const pct = targetAmount > 0
@@ -1267,11 +986,11 @@ function SavingsGoalCard({
             </div>
             <div>
               <p className="text-[15px] font-semibold" style={{ color: C.white }}>
-                {goal?.title || "Mục tiêu"}
+                {goal?.title || t("stats.goal")}
               </p>
               {daysLeft !== null && (
                 <p className="text-[11px] mt-0.5" style={{ color: isCompleted ? C.green : daysLeft < 30 ? C.red : C.tm }}>
-                  {isCompleted ? "Hoàn thành! 🎉" : daysLeft === 0 ? "Hết hạn hôm nay!" : `${daysLeft} ngày còn lại`}
+                  {isCompleted ? t("stats.completedExclamation") : daysLeft === 0 ? t("stats.expiredToday") : t("stats.daysRemaining", { count: daysLeft })}
                 </p>
               )}
             </div>
@@ -1332,6 +1051,8 @@ function GoalActionModal({
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const currentAmount = typeof goal?.currentAmount === "number" ? goal.currentAmount : Number(goal?.currentAmount) || 0;
   const targetAmount = typeof goal?.targetAmount === "number" ? goal.targetAmount : Number(goal?.targetAmount) || 0;
   const pct = targetAmount > 0
@@ -1363,7 +1084,7 @@ function GoalActionModal({
         <div className="flex-1">
           <p className="text-[15px] font-semibold" style={{ color: C.white }}>{goal?.title || "Mục tiêu"}</p>
           <p className="text-[12px]" style={{ color: C.tm }}>
-            ${currentAmount.toLocaleString()} / ${targetAmount.toLocaleString()} · {pct}%
+            {formatCurrency(currentAmount)} / {formatCurrency(targetAmount)} · {pct}%
           </p>
         </div>
       </div>
@@ -1380,7 +1101,7 @@ function GoalActionModal({
               color: mode === m ? C.bg : C.tm,
             }}
           >
-            {m === "deposit" ? "💰 Nạp tiền" : "💸 Rút tiền"}
+            {m === "deposit" ? `💰 ${t("stats.deposit")}` : `💸 ${t("stats.withdraw")}`}
           </button>
         ))}
       </div>
@@ -1388,12 +1109,10 @@ function GoalActionModal({
       {/* Balance Info */}
       <div className="flex items-center justify-between px-1">
         <span className="text-[12px]" style={{ color: C.tm }}>
-          {mode === "deposit" ? "Số dư khả dụng" : "Số dư trong hũ"}
+          {mode === "deposit" ? t("stats.availableBalance") : t("stats.goalBalance")}
         </span>
         <span className="text-[13px] font-bold" style={{ color: mode === "deposit" ? C.green : C.gold }}>
-          ${mode === "deposit"
-            ? (availableBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
-            : currentAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          {formatCurrency(mode === "deposit" ? availableBalance || 0 : currentAmount)}
         </span>
       </div>
 
@@ -1456,7 +1175,7 @@ function AddGoalModal({
   const [targetAmount, setTargetAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [selectedIcon, setSelectedIcon] = useState("PiggyBank");
-  const [selectedColor, setSelectedColor] = useState(C.gold);
+  const [selectedColor, setSelectedColor] = useState<string>(C.gold);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1599,6 +1318,8 @@ function SavingsGoalsScreen({
   onDelete,
 }: SavingsGoalsScreenProps) {
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
 
   const totalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
   const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
@@ -1611,15 +1332,15 @@ function SavingsGoalsScreen({
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-[12px] font-medium mb-0.5" style={{ color: C.tm }}>Số dư khả dụng</p>
+            <p className="text-[12px] font-medium mb-0.5" style={{ color: C.tm }}>{t("stats.availableBalance")}</p>
             <div className="flex items-baseline gap-1">
               <span className="text-[26px] font-bold tracking-tight" style={{ color: C.white }}>
-                ${availableBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {formatCurrency(availableBalance)}
               </span>
             </div>
             <p className="text-[11px] mt-1" style={{ color: C.tm }}>
-              Tổng số dư:{" "}
-              <span style={{ color: C.t2, fontWeight: 600 }}>${totalBalance.toLocaleString()}</span>
+              {t("stats.totalBalance")}:{" "}
+              <span style={{ color: C.t2, fontWeight: 600 }}>{formatCurrency(totalBalance)}</span>
             </p>
           </div>
           <div
@@ -1635,7 +1356,7 @@ function SavingsGoalsScreen({
           <>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[12px]" style={{ color: C.tm }}>
-                Tiến độ tổng: ${totalSaved.toLocaleString()} / ${totalTarget.toLocaleString()}
+                {t("stats.totalProgress")}: {formatCurrency(totalSaved)} / {formatCurrency(totalTarget)}
               </span>
               <span className="text-[12px] font-bold" style={{ color: C.gold }}>{overallPct}%</span>
             </div>
@@ -1651,11 +1372,11 @@ function SavingsGoalsScreen({
             <div className="flex gap-4">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ background: C.gold }} />
-                <span className="text-[11px]" style={{ color: C.tm }}>{goals.length} hũ</span>
+                <span className="text-[11px]" style={{ color: C.tm }}>{goals.length} {t("stats.goals")}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ background: C.green }} />
-                <span className="text-[11px]" style={{ color: C.tm }}>{completedCount} hoàn thành</span>
+                <span className="text-[11px]" style={{ color: C.tm }}>{completedCount} {t("stats.completed")}</span>
               </div>
             </div>
           </>
@@ -1672,10 +1393,10 @@ function SavingsGoalsScreen({
             <PiggyBank size={32} color={C.gold} strokeWidth={1.8} />
           </div>
           <h3 className="text-[18px] font-bold mb-2" style={{ color: C.white }}>
-            Chưa có hũ tiết kiệm nào
+            {t("stats.noSavingsGoals")}
           </h3>
           <p className="text-[13px] mb-6 max-w-xs" style={{ color: C.tm }}>
-            Tạo hũ tiết kiệm đầu tiên để bắt đầu theo dõi mục tiêu tài chính của bạn.
+            {t("stats.createSavingsGoalHint")}
           </p>
           <motion.button
             onClick={onAddGoalClick}
@@ -1685,14 +1406,14 @@ function SavingsGoalsScreen({
             whileTap={{ scale: 0.96 }}
           >
             <Plus size={16} />
-            Tạo hũ đầu tiên
+            {t("stats.createFirstGoal")}
           </motion.button>
         </Card>
       ) : (
         <>
           <div className="flex items-center justify-between">
             <h3 className="text-[15px] font-semibold" style={{ color: C.white }}>
-              Danh sách hũ tiết kiệm
+              {t("stats.savingsGoalList")}
             </h3>
             <motion.button
               onClick={onAddGoalClick}
@@ -1700,13 +1421,13 @@ function SavingsGoalsScreen({
               style={{ background: C.gold + "22", color: C.gold, border: `1px solid ${C.gold}33` }}
               whileTap={{ scale: 0.95 }}
             >
-              <Plus size={13} /> Thêm hũ
+              <Plus size={13} /> {t("stats.addGoal")}
             </motion.button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {goals.map((goal) => (
-              <GoalCard
+              <SavingsGoalCard
                 key={goal.id}
                 goal={goal}
                 onClick={setSelectedGoal}
@@ -1928,6 +1649,7 @@ function Sidebar({
 }
 
 import { useCurrency } from "./context/CurrencyContext";
+import { parseAmountInput, toDisplayedAmount, toStoredAmount } from "./context/currencyAmounts";
 
 function LanguageToggle() {
   const { i18n } = useTranslation();
@@ -1996,7 +1718,7 @@ function SettingsForm({
         e.preventDefault();
         onSave(key);
       }}
-      className="flex flex-col gap-4 text-white text-sm"
+      className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]"
     >
       <div className="flex flex-col gap-2">
         <label className="text-[12px] font-semibold text-tm">GEMINI API KEY</label>
@@ -2005,7 +1727,7 @@ function SettingsForm({
           value={key}
           onChange={(e) => setKey(e.target.value)}
           placeholder="Dán Gemini API Key của bạn vào đây..."
-          className="w-full px-4 py-3 rounded-xl outline-none border text-white bg-surf"
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-3 text-[var(--paper-ink)] outline-none"
           style={{ borderColor: C.border }}
         />
         <p className="text-[11px] text-tm leading-relaxed mt-1">
@@ -2053,7 +1775,7 @@ function Modal({
           />
           {/* Dialog Container */}
           <motion.div
-            className="relative w-full max-w-md overflow-hidden rounded-3xl p-6 shadow-2xl border"
+            className="paper-ledger paper-dialog relative w-full max-w-md overflow-hidden rounded-3xl p-6 shadow-2xl border"
             style={{ background: C.card, borderColor: C.border }}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2061,10 +1783,10 @@ function Modal({
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[18px] font-bold text-white">{title}</h3>
+              <h3 className="text-[18px] font-bold text-[var(--paper-ink)]" style={{ color: C.high }}>{title}</h3>
               <button
                 onClick={onClose}
-                className="text-[13px] font-medium text-tm hover:text-white px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                className="cursor-pointer rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
               >
                 Close
               </button>
@@ -2077,147 +1799,8 @@ function Modal({
   );
 }
 
-function getSmartCategoryFromTitle(title: string): string {
-  const keyword = title.trim().toLowerCase();
-
-  // 1. Food (Ăn uống, Cơm, Phở, Món ăn, GrabFood, Fast food...)
-  if (
-    keyword.includes("ăn") || keyword.includes("cơm") || keyword.includes("phở") ||
-    keyword.includes("bún") || keyword.includes("bánh") || keyword.includes("hủ tiếu") ||
-    keyword.includes("miến") || keyword.includes("cháo") || keyword.includes("lẩu") ||
-    keyword.includes("nướng") || keyword.includes("buffet") || keyword.includes("nhà hàng") ||
-    keyword.includes("quán ăn") || keyword.includes("suất ăn") || keyword.includes("đồ ăn") ||
-    keyword.includes("snack") || keyword.includes("pizza") || keyword.includes("burger") ||
-    keyword.includes("kfc") || keyword.includes("lotte") || keyword.includes("mcdonald") ||
-    keyword.includes("jollibee") || keyword.includes("texas chicken") || keyword.includes("domino") ||
-    keyword.includes("food") || keyword.includes("lunch") || keyword.includes("dinner") ||
-    keyword.includes("breakfast") || keyword.includes("meal") || keyword.includes("dining") ||
-    keyword.includes("restaurant") || keyword.includes("eat") || keyword.includes("noodle") ||
-    keyword.includes("rice") || keyword.includes("soup") || keyword.includes("steak") ||
-    keyword.includes("sushi") || keyword.includes("bbq") || keyword.includes("grabfood") ||
-    keyword.includes("shopeefood") || keyword.includes("baemin") || keyword.includes("ốc") ||
-    keyword.includes("bột chiên") || keyword.includes("ramen") || keyword.includes("dimsum")
-  ) {
-    return "Food";
-  }
-
-  // 2. Drinks (Đồ uống, Cà phê, Trà sữa, Nước giải khát...)
-  if (
-    keyword.includes("uống") || keyword.includes("trà") || keyword.includes("trà sữa") ||
-    keyword.includes("boba") || keyword.includes("cf") || keyword.includes("cafe") ||
-    keyword.includes("cà phê") || keyword.includes("nước") || keyword.includes("sinh tố") ||
-    keyword.includes("nước ép") || keyword.includes("bia") || keyword.includes("rượu") ||
-    keyword.includes("pub") || keyword.includes("bar") || keyword.includes("highlands") ||
-    keyword.includes("phúc long") || keyword.includes("starbucks") || keyword.includes("coffee") ||
-    keyword.includes("katinat") || keyword.includes("phê la") || keyword.includes("tocotoco") ||
-    keyword.includes("gong cha") || keyword.includes("dingtea") || keyword.includes("mixue") ||
-    keyword.includes("coca") || keyword.includes("pepsi") || keyword.includes("sting") ||
-    keyword.includes("latte") || keyword.includes("matcha") || keyword.includes("cappuccino") ||
-    keyword.includes("drink") || keyword.includes("drinks") || keyword.includes("beverage") ||
-    keyword.includes("juice") || keyword.includes("smoothie") || keyword.includes("beer") ||
-    keyword.includes("wine") || keyword.includes("soda") || keyword.includes("water") ||
-    keyword.includes("nước mía") || keyword.includes("dừa") || keyword.includes("quán nước")
-  ) {
-    return "Drinks";
-  }
-
-  // 3. Groceries (Đi chợ, Siêu thị, WinMart, Bách hóa xanh, Nhu yếu phẩm...)
-  if (
-    keyword.includes("đi chợ") || keyword.includes("chợ") || keyword.includes("siêu thị") ||
-    keyword.includes("winmart") || keyword.includes("bách hóa xanh") || keyword.includes("coopmart") ||
-    keyword.includes("lotte mart") || keyword.includes("big c") || keyword.includes("aeon") ||
-    keyword.includes("circle k") || keyword.includes("family mart") || keyword.includes("7 eleven") ||
-    keyword.includes("gs25") || keyword.includes("thực phẩm") || keyword.includes("rau") ||
-    keyword.includes("củ") || keyword.includes("quả") || keyword.includes("trái cây") ||
-    keyword.includes("thịt tươi") || keyword.includes("cá tươi") || keyword.includes("trứng") ||
-    keyword.includes("sữa") || keyword.includes("gạo") || keyword.includes("mắm") ||
-    keyword.includes("dầu ăn") || keyword.includes("nhu yếu phẩm") || keyword.includes("grocery") ||
-    keyword.includes("groceries") || keyword.includes("supermarket") || keyword.includes("produce") ||
-    keyword.includes("vegetables") || keyword.includes("fruits") || keyword.includes("dairy") ||
-    keyword.includes("milk") || keyword.includes("eggs") || keyword.includes("bread") ||
-    keyword.includes("pantry") || keyword.includes("provisions")
-  ) {
-    return "Groceries";
-  }
-
-  // 4. Shopping & E-Commerce & Retail
-  if (
-    keyword.includes("shoppe") || keyword.includes("shopee") || keyword.includes("shop") ||
-    keyword.includes("shoping") || keyword.includes("shopping") || keyword.includes("tiki") ||
-    keyword.includes("lazada") || keyword.includes("sendo") || keyword.includes("amazon") ||
-    keyword.includes("tiktok") || keyword.includes("mua") || keyword.includes("sắm") ||
-    keyword.includes("mall") || keyword.includes("boutique") || keyword.includes("clothes") ||
-    keyword.includes("áo") || keyword.includes("quần") || keyword.includes("giày") ||
-    keyword.includes("dép") || keyword.includes("túi") || keyword.includes("ví") ||
-    keyword.includes("store") || keyword.includes("market") || keyword.includes("fashion") ||
-    keyword.includes("mỹ phẩm") || keyword.includes("skincare") || keyword.includes("nước hoa")
-  ) {
-    return "Shopping";
-  }
-
-  // 5. Fuel & Transport
-  if (
-    keyword.includes("xe") || keyword.includes("bus") || keyword.includes("taxi") ||
-    keyword.includes("grab") || keyword.includes("be") || keyword.includes("gojek") ||
-    keyword.includes("xăng") || keyword.includes("gas") || keyword.includes("oil") ||
-    keyword.includes("bãi xe") || keyword.includes("gửi xe") || keyword.includes("vé xe") ||
-    keyword.includes("máy bay") || keyword.includes("flight") || keyword.includes("drive") ||
-    keyword.includes("fuel") || keyword.includes("đổ xăng") || keyword.includes("rửa xe")
-  ) {
-    return "Fuel";
-  }
-
-  // 6. Housing & Utilities
-  if (
-    keyword.includes("nhà") || keyword.includes("điện") || keyword.includes("nước") ||
-    keyword.includes("mạng") || keyword.includes("wifi") || keyword.includes("internet") ||
-    keyword.includes("phòng") || keyword.includes("rent") || keyword.includes("house") ||
-    keyword.includes("bill") || keyword.includes("chung cư") || keyword.includes("tiền nhà")
-  ) {
-    return "Housing";
-  }
-
-  // 7. Entertainment & Gaming
-  if (
-    keyword.includes("chơi") || keyword.includes("game") || keyword.includes("phim") ||
-    keyword.includes("netflix") || keyword.includes("youtube") || keyword.includes("spotify") ||
-    keyword.includes("movie") || keyword.includes("vé") || keyword.includes("cgv") ||
-    keyword.includes("bida") || keyword.includes("karaoke") || keyword.includes("du lịch") ||
-    keyword.includes("steam") || keyword.includes("nintendo") || keyword.includes("playstation")
-  ) {
-    return "Entertainment";
-  }
-
-  // 8. Salary & Income
-  if (
-    keyword.includes("lương") || keyword.includes("thưởng") || keyword.includes("salary") ||
-    keyword.includes("bonus") || keyword.includes("paycheck") || keyword.includes("thu nhập")
-  ) {
-    return "Salary";
-  }
-
-  // 9. Bank & Transfer
-  if (
-    keyword.includes("bank") || keyword.includes("chuyển khoản") || keyword.includes("rút tiền") ||
-    keyword.includes("vcb") || keyword.includes("tcb") || keyword.includes("mbbank") ||
-    keyword.includes("tpbank") || keyword.includes("momo") || keyword.includes("zalopay")
-  ) {
-    return "Bank";
-  }
-
-  // 10. Investment
-  if (
-    keyword.includes("chứng khoán") || keyword.includes("coin") || keyword.includes("crypto") ||
-    keyword.includes("lãi") || keyword.includes("tiết kiệm") || keyword.includes("invest")
-  ) {
-    return "Investment";
-  }
-
-  return "Others";
-}
-
 function useAutoCategory(title: string, hasManuallySelected: boolean) {
-  const [isGuessing, setIsGuessing] = useState(false);
+  const isGuessing = false;
   const [guessedCategory, setGuessedCategory] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2226,33 +1809,7 @@ function useAutoCategory(title: string, hasManuallySelected: boolean) {
       return;
     }
 
-    setIsGuessing(true);
-
-    // 1. Synchronously set local smart guess for zero-latency response
-    const localGuess = getSmartCategoryFromTitle(title);
-    setGuessedCategory(localGuess);
-
-    // 2. Debounced API fetch with fail-safe fallback
-    const delayDebounce = setTimeout(async () => {
-      try {
-        const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
-        const url = `${backendHost}/api/transactions/guess-category?title=${encodeURIComponent(title.trim())}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        if (data && data.category) {
-          setGuessedCategory(data.category);
-        }
-      } catch (e) {
-        // Fallback already set by getSmartCategoryFromTitle
-      } finally {
-        setIsGuessing(false);
-      }
-    }, 150);
-
-    return () => clearTimeout(delayDebounce);
+    setGuessedCategory(classifyTransactionCategory(title));
   }, [title, hasManuallySelected]);
 
   return { isGuessing, guessedCategory };
@@ -2266,7 +1823,7 @@ function AddTransactionForm({
   onAdd: (tx: Omit<Transaction, "id">, walletId: number) => void;
 }) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -2305,52 +1862,52 @@ function AddTransactionForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !amount) return;
-    const numAmt = parseFloat(amount);
+    const numAmt = parseAmountInput(amount);
     if (isNaN(numAmt) || numAmt <= 0) return;
     
-    const finalAmount = type === "outcome" ? -numAmt : numAmt;
-    const [year, month, day] = date.split("-");
-    const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
-
+    const finalAmount = toStoredAmount(type === "outcome" ? -numAmt : numAmt, currency);
     onAdd({
       name,
       amount: finalAmount,
       category,
-      date: formattedDate,
+      // Keep the native date input's ISO value. Postgres date columns and the
+      // transaction RPC expect YYYY-MM-DD; converting to DD-MM-YYYY makes
+      // previous-day transactions fail to save (or be parsed ambiguously).
+      date,
       walletId,
     }, walletId);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white">
-      <div className="flex gap-2 p-1 rounded-xl bg-surf">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-[var(--paper-ink)]" style={{ color: "var(--paper-ink)" }}>
+      <div className="flex gap-2 rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] p-1">
         <button
           type="button"
           onClick={() => setType("outcome")}
           className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
           style={{
-            background: type === "outcome" ? C.red : "transparent",
-            color: type === "outcome" ? C.white : C.tm,
+            background: type === "outcome" ? "var(--paper-ink)" : "transparent",
+            color: type === "outcome" ? "white" : "var(--paper-muted)",
           }}
         >
-          {t("stats.outcome", "Chi tiêu")}
+          {t("stats.outcome")}
         </button>
         <button
           type="button"
           onClick={() => setType("income")}
           className="flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer text-xs md:text-sm"
           style={{
-            background: type === "income" ? C.green : "transparent",
-            color: type === "income" ? C.bg : C.tm,
+            background: type === "income" ? "var(--paper-sage-soft)" : "transparent",
+            color: type === "income" ? "var(--paper-ink)" : "var(--paper-muted)",
           }}
         >
-          {t("stats.income", "Thu nhập")}
+          {t("stats.income")}
         </button>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">
-          {t("dashboard.description", "Mô tả / Tên giao dịch")}
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.description")}
         </label>
         <input
           type="text"
@@ -2363,14 +1920,14 @@ function AddTransactionForm({
               setHasManuallySelected(false);
             }
           }}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
-          style={{ borderColor: C.border }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">
-          {t("dashboard.amount", "Số tiền")}
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+            {t("dashboard.amount")}
         </label>
         <input
           type="number"
@@ -2380,19 +1937,19 @@ function AddTransactionForm({
           placeholder="0"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
-          style={{ borderColor: C.border }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-tm font-medium">
-            {t("dashboard.category", "Danh mục")}
+          <label className="text-xs font-semibold text-[var(--paper-muted)]">
+            {t("dashboard.category")}
           </label>
           {isGuessing && (
-            <div className="flex items-center gap-1 text-[11px] text-gold font-medium animate-pulse">
-              <Loader2 size={11} className="animate-spin text-gold" />
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-[var(--paper-warning)] animate-pulse">
+              <Loader2 size={11} className="animate-spin text-[var(--paper-warning)]" />
               <span>Gợi ý danh mục...</span>
             </div>
           )}
@@ -2403,8 +1960,8 @@ function AddTransactionForm({
             setHasManuallySelected(true);
             setCategory(e.target.value);
           }}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
-          style={{ borderColor: C.border }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
         >
           {categories.map((cat) => (
             <option key={cat} value={cat} className="bg-sec">
@@ -2415,14 +1972,14 @@ function AddTransactionForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">
-          {t("dashboard.payWith", "Tài khoản / Ví")}
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.payWith")}
         </label>
         <select
           value={walletId}
           onChange={(e) => setWalletId(Number(e.target.value))}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
-          style={{ borderColor: C.border }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
         >
           {wallets.map((w) => (
             <option key={w.id} value={w.id} className="bg-sec">
@@ -2433,25 +1990,25 @@ function AddTransactionForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium">
-          {t("dashboard.date", "Ngày giao dịch")}
+        <label className="text-xs font-semibold text-[var(--paper-muted)]">
+          {t("dashboard.date")}
         </label>
         <input
           type="date"
           required
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl outline-none border text-white bg-surf"
-          style={{ borderColor: C.border }}
+          className="w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper-canvas)] px-4 py-2.5 text-[var(--paper-ink)] outline-none"
+          style={{ borderColor: "var(--paper-border)", color: "var(--paper-ink)", background: "var(--paper-canvas)" }}
         />
       </div>
 
       <button
         type="submit"
         className="w-full py-3 mt-2 rounded-xl font-bold transition-all cursor-pointer"
-        style={{ background: C.gold, color: C.bg }}
+        style={{ background: "var(--paper-ink)", color: "white" }}
       >
-        {t("dashboard.saveTransaction", "Lưu giao dịch")}
+        {t("dashboard.saveTransaction")}
       </button>
     </form>
   );
@@ -2469,24 +2026,31 @@ function EditTransactionForm({
   onDelete?: (id: number) => void;
 }) {
   const { t } = useTranslation();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
 
   const [name, setName] = useState(transaction.name);
-  const [amount, setAmount] = useState(String(Math.abs(transaction.amount)));
+  const [amount, setAmount] = useState(String(toDisplayedAmount(Math.abs(transaction.amount), currency)));
   const [type, setType] = useState<"income" | "outcome">(
     transaction.amount < 0 ? "outcome" : "income"
   );
   const [category, setCategory] = useState(transaction.category || "Others");
   const [walletId, setWalletId] = useState(transaction.walletId || wallets[0]?.id || 1);
 
-  // Convert DD-MM-YYYY to YYYY-MM-DD for <input type="date" />
+  // Convert DD-MM-YYYY or ISO format to YYYY-MM-DD for <input type="date" />
   const [date, setDate] = useState(() => {
     if (!transaction.date) return new Date().toISOString().split("T")[0];
-    const parts = transaction.date.split("-");
-    if (parts.length === 3 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    const cleanDate = transaction.date.split("T")[0].trim();
+    const parts = cleanDate.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
     }
-    return transaction.date;
+    return new Date().toISOString().split("T")[0];
   });
 
   const categories = [
@@ -2506,19 +2070,16 @@ function EditTransactionForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !amount) return;
-    const numAmt = parseFloat(amount);
+    const numAmt = parseAmountInput(amount);
     if (isNaN(numAmt) || numAmt <= 0) return;
 
-    const finalAmount = type === "outcome" ? -numAmt : numAmt;
-    const [year, month, day] = date.split("-");
-    const formattedDate = `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
-
+    const finalAmount = toStoredAmount(type === "outcome" ? -numAmt : numAmt, currency);
     onSave({
       ...transaction,
       name,
       amount: finalAmount,
       category,
-      date: formattedDate,
+      date,
       walletId,
     });
   };
@@ -2535,7 +2096,7 @@ function EditTransactionForm({
             color: type === "outcome" ? C.white : C.tm,
           }}
         >
-          {t("stats.outcome", "Chi tiêu")}
+          {t("stats.outcome")}
         </button>
         <button
           type="button"
@@ -2546,13 +2107,13 @@ function EditTransactionForm({
             color: type === "income" ? C.bg : C.tm,
           }}
         >
-          {t("stats.income", "Thu nhập")}
+          {t("stats.income")}
         </button>
       </div>
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.description", "Mô tả / Tên giao dịch")}
+          {t("dashboard.description")}
         </label>
         <input
           type="text"
@@ -2566,7 +2127,7 @@ function EditTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.amount", "Số tiền")}
+            {t("dashboard.amount")}
         </label>
         <input
           type="number"
@@ -2582,7 +2143,7 @@ function EditTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.category", "Danh mục")}
+            {t("dashboard.category")}
         </label>
         <select
           value={category}
@@ -2600,7 +2161,7 @@ function EditTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.payWith", "Tài khoản / Ví")}
+          {t("dashboard.payWith")}
         </label>
         <select
           value={walletId}
@@ -2618,7 +2179,7 @@ function EditTransactionForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-tm font-medium">
-          {t("dashboard.date", "Ngày giao dịch")}
+          {t("dashboard.date")}
         </label>
         <input
           type="date"
@@ -2637,7 +2198,7 @@ function EditTransactionForm({
             onClick={() => onDelete(transaction.id)}
             className="flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30"
           >
-            {t("common.delete", "Xóa")}
+            {t("common.delete")}
           </button>
         )}
         <button
@@ -2645,7 +2206,7 @@ function EditTransactionForm({
           className="flex-[2] py-3 rounded-xl font-bold transition-all cursor-pointer"
           style={{ background: C.gold, color: C.bg }}
         >
-          {t("dashboard.saveTransaction", "Lưu giao dịch")}
+          {t("dashboard.saveTransaction")}
         </button>
       </div>
     </form>
@@ -2659,7 +2220,7 @@ function AddWalletForm({
 }) {
   const [label, setLabel] = useState("");
   const [balance, setBalance] = useState("");
-  const [accent, setAccent] = useState(C.purple);
+  const [accent, setAccent] = useState<string>(C.purple);
 
   const colors = [
     { label: "Purple", value: C.purple },
@@ -2897,20 +2458,22 @@ function EditBudgetForm({
   initialBudget: number;
   onSave: (newBudget: number) => void;
 }) {
-  const [budgetVal, setBudgetVal] = useState(initialBudget === 0 ? "" : initialBudget.toString());
+  const { t } = useTranslation();
+  const { currency } = useCurrency();
+  const [budgetVal, setBudgetVal] = useState(initialBudget === 0 ? "" : toDisplayedAmount(initialBudget, currency).toString());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = budgetVal.trim() === "" ? 0 : parseFloat(budgetVal);
     if (!isNaN(val) && val >= 0) {
-      onSave(val);
+      onSave(toStoredAmount(val, currency));
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-white font-sans">
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-tm font-medium uppercase tracking-wider pl-0.5">{t("dashboard.monthlyBudget")}</label>
+        <label className="text-xs text-tm font-medium uppercase tracking-wider pl-0.5">{t("dashboard.monthlyBudget")} ({currency})</label>
         <input
           type="number"
           step="1"
@@ -2938,8 +2501,10 @@ function EditBudgetForm({
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState(0);
+  const { t, i18n } = useTranslation();
+  const { formatCurrency, currency } = useCurrency();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<AppDestination>("home");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // User Onboarding State
@@ -3018,6 +2583,49 @@ export default function App() {
     return 0;
   });
 
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_recurring_expenses");
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Error reading recurring expenses from localStorage", error);
+      return [];
+    }
+  });
+  const [handledOccurrenceIds, setHandledOccurrenceIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("wealthy_v2_recurring_occurrences");
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Error reading recurring occurrences from localStorage", error);
+      return [];
+    }
+  });
+  const walletCloudIdsRef = useRef(new Map<number, string>());
+  const pendingWalletCreatesRef = useRef(new Map<number, Promise<string>>());
+  const transactionCloudIdsRef = useRef(new Map<number, string>());
+  const savingsGoalCloudIdsRef = useRef(new Map<number, string>());
+  const budgetCloudIdRef = useRef<string | null>(null);
+  const [cloudLoadError, setCloudLoadError] = useState("");
+  const [cloudLoadStatus, setCloudLoadStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const [cloudReloadAttempt, setCloudReloadAttempt] = useState(0);
+  const isCurrentUserReady = cloudLoadStatus === "ready" && loadedUserId === user?.id;
+
+  useEffect(() => {
+    if (!user) return;
+    void supabase.from("tracker_profiles").upsert({
+      id: user.id,
+      preferred_language: i18n.language?.startsWith("vi") ? "vi" : "en",
+      preferred_currency: currency,
+    }).then(({ error }) => {
+      if (error) console.error("Unable to persist user preferences", error);
+    });
+  }, [currency, i18n.language, user]);
+  const handledOccurrenceIdsRef = useRef(new Set(handledOccurrenceIds));
+
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modal Visibility States
@@ -3031,8 +2639,6 @@ export default function App() {
   const [selectedGoalToAction, setSelectedGoalToAction] = useState<SavingsGoal | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
 
   // Track transaction IDs applied to wallet balances
   const [appliedTxIds, setAppliedTxIds] = useState<number[]>(() => {
@@ -3052,24 +2658,37 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_transactions", JSON.stringify(transactions));
-  }, [transactions]);
+  }, [isCurrentUserReady, transactions]);
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_wallets", JSON.stringify(wallets));
-  }, [wallets]);
+  }, [isCurrentUserReady, wallets]);
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_savings_goals", JSON.stringify(savingsGoals));
-  }, [savingsGoals]);
+  }, [isCurrentUserReady, savingsGoals]);
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_budget", budget.toString());
-  }, [budget]);
+  }, [budget, isCurrentUserReady]);
 
   useEffect(() => {
+    if (!isCurrentUserReady) return;
     localStorage.setItem("wealthy_v2_applied_tx_ids", JSON.stringify(appliedTxIds));
-  }, [appliedTxIds]);
+  }, [appliedTxIds, isCurrentUserReady]);
+
+  useEffect(() => {
+    localStorage.setItem("wealthy_v2_recurring_expenses", JSON.stringify(recurringExpenses));
+  }, [recurringExpenses]);
+
+  useEffect(() => {
+    localStorage.setItem("wealthy_v2_recurring_occurrences", JSON.stringify(handledOccurrenceIds));
+  }, [handledOccurrenceIds]);
 
   // Reconcile unapplied transactions (e.g. Split Bill transactions) to active wallet balance
   useEffect(() => {
@@ -3101,57 +2720,143 @@ export default function App() {
   }, [wallets, transactions, appliedTxIds]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const emptyData = emptyCloudFinance();
+
+    setCloudLoadStatus("loading");
+    setLoadedUserId(null);
+    setCloudLoadError("");
+    walletCloudIdsRef.current = emptyData.walletCloudIds;
+    transactionCloudIdsRef.current = emptyData.transactionCloudIds;
+    savingsGoalCloudIdsRef.current = emptyData.savingsGoalCloudIds;
+    budgetCloudIdRef.current = emptyData.budgetCloudId;
+    setWallets(emptyData.wallets);
+    setTransactions(emptyData.transactions);
+    setSavingsGoals(emptyData.savingsGoals);
+    setBudget(emptyData.budget);
+    setAppliedTxIds([]);
+
+    void loadCloudFinance()
+      .then((cloudData) => {
+        if (cancelled) return;
+        applyCloudFinance(cloudData);
+        setCloudLoadError("");
+        setLoadedUserId(user?.id ?? null);
+        setCloudLoadStatus("ready");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("Unable to load cloud finance data", error);
+          setCloudLoadError(i18n.language?.startsWith("vi") ? "Không thể tải dữ liệu đã đồng bộ. Hãy thử lại." : "Cloud data could not be loaded. Please try again.");
+          setCloudLoadStatus("error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  // Changing the display language must not reload the financial workspace.
+  // The previous dependency caused a second cloud bootstrap after AuthProvider
+  // restored the user's language, which looked like an automatic page refresh.
+  }, [user?.id, cloudReloadAttempt]);
 
   // Handle username edit
   const handleEditName = () => {
     setIsProfileModalOpen(true);
   };
 
-  const handleSaveSettings = (key: string) => {
-    localStorage.setItem("gemini_api_key", key);
-    setGeminiApiKey(key);
-    setIsSettingsModalOpen(false);
+  const reportCloudSaveError = (error: unknown) => {
+    console.error("Unable to save cloud finance data", error);
+    setCloudLoadError(i18n.language?.startsWith("vi") ? "Không thể lưu dữ liệu lên cloud. Hãy thử lại." : "Cloud data could not be saved. Please try again.");
+  };
+
+  const applyCloudFinance = (cloudData: Awaited<ReturnType<typeof loadCloudFinance>>) => {
+    walletCloudIdsRef.current = cloudData.walletCloudIds;
+    transactionCloudIdsRef.current = cloudData.transactionCloudIds;
+    savingsGoalCloudIdsRef.current = cloudData.savingsGoalCloudIds;
+    budgetCloudIdRef.current = cloudData.budgetCloudId;
+    setWallets(cloudData.wallets);
+    setTransactions(cloudData.transactions);
+    setSavingsGoals(cloudData.savingsGoals);
+    setBudget(cloudData.budget);
+    setAppliedTxIds(cloudData.transactions.map((transaction) => transaction.id));
+  };
+
+  const refreshCloudFinance = async () => {
+    const cloudData = await loadCloudFinance();
+    applyCloudFinance(cloudData);
+    setCloudLoadError("");
   };
 
   // Handle addition of a transaction
-  const handleAddTransaction = (newTx: Omit<Transaction, "id">, walletId?: number) => {
+  const handleAddTransaction = async (newTx: Omit<Transaction, "id">, walletId?: number) => {
     const validWallet = wallets.find((w) => w.id === (walletId || newTx.walletId)) || wallets[0];
     const targetWalletId = validWallet ? validWallet.id : (walletId || newTx.walletId || 1);
 
-    const nextId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
-    const tx: Transaction = { ...newTx, walletId: targetWalletId, id: nextId };
-
-    setTransactions((prev) => [tx, ...prev]);
-    setAppliedTxIds((prev) => [...prev, nextId]);
-
-    // Adjust the wallet balance
-    setWallets((prev) => {
-      if (prev.length === 0) {
-        return [{ id: 1, label: "Main Wallet", balance: newTx.amount, accent: C.purple }];
+    try {
+      const walletToUse = validWallet ?? { id: targetWalletId, label: "Main Wallet", balance: 0, accent: C.purple };
+      let walletCloudId = walletCloudIdsRef.current.get(targetWalletId);
+      if (!walletCloudId) {
+        const pendingCreate = pendingWalletCreatesRef.current.get(targetWalletId);
+        walletCloudId = pendingCreate
+          ? await pendingCreate
+          : await createCloudWallet(walletToUse);
+        walletCloudIdsRef.current.set(targetWalletId, walletCloudId);
       }
-      return prev.map((w) =>
-        w.id === targetWalletId ? { ...w, balance: w.balance + newTx.amount } : w
-      );
-    });
+      await createCloudTransaction({ ...newTx, walletId: targetWalletId, id: 0 }, walletCloudId);
+      await refreshCloudFinance();
+      setIsTxModalOpen(false);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
+  };
 
-    setIsTxModalOpen(false);
+  const handleAddRecurringExpense = (expense: Omit<RecurringExpense, "id">) => {
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `recurring-${Date.now()}`;
+    setRecurringExpenses((current) => [...current, { ...expense, id }]);
+  };
+
+  const handleToggleRecurringExpense = (id: string) => {
+    setRecurringExpenses((current) => current.map((expense) => expense.id === id ? { ...expense, status: expense.status === "active" ? "paused" : "active" } : expense));
+  };
+
+  const handleDeleteRecurringExpense = (id: string) => {
+    setRecurringExpenses((current) => current.filter((expense) => expense.id !== id));
+  };
+
+  const handleConfirmRecurring = (occurrenceId: string) => {
+    if (handledOccurrenceIdsRef.current.has(occurrenceId)) return;
+    const expense = recurringExpenses.find((item) => `${item.id}:${item.nextDueDate}` === occurrenceId);
+    if (!expense) return;
+
+    handledOccurrenceIdsRef.current.add(occurrenceId);
+    setHandledOccurrenceIds((current) => current.includes(occurrenceId) ? current : [...current, occurrenceId]);
+    void handleAddTransaction({
+      name: expense.name,
+      amount: -Math.abs(expense.expectedAmount),
+      date: expense.nextDueDate,
+      category: expense.category,
+      walletId: expense.walletId,
+    }, expense.walletId);
+    setRecurringExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, nextDueDate: advanceMonthlyDueDate(item.nextDueDate, item.dayOfMonth) } : item));
   };
 
   // Handle deletion of a transaction (reverses wallet balance)
-  const handleDeleteTransaction = (txId: number) => {
+  const handleDeleteTransaction = async (txId: number) => {
     const tx = transactions.find((t) => t.id === txId);
     if (!tx) return;
-    setTransactions((prev) => prev.filter((t) => t.id !== txId));
-    // Reverse the amount from the wallet balance
-    setWallets((prev) =>
-      prev.map((w) =>
-        (w.id === tx.walletId || (prev.length === 1 && w.id === prev[0].id))
-          ? { ...w, balance: w.balance - tx.amount }
-          : w
-      )
-    );
+    const transactionCloudId = transactionCloudIdsRef.current.get(txId);
+    if (!transactionCloudId) return reportCloudSaveError(new Error("Transaction is not synchronized."));
+    try {
+      await deleteCloudTransaction(transactionCloudId);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   const handleEditTxClick = (tx: Transaction) => {
@@ -3159,41 +2864,38 @@ export default function App() {
     setIsEditTxModalOpen(true);
   };
 
-  const handleSaveTxEdit = (updatedTx: Transaction) => {
+  const handleSaveTxEdit = async (updatedTx: Transaction) => {
     const oldTx = transactions.find((t) => t.id === updatedTx.id);
     if (!oldTx) return;
-
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === updatedTx.id ? updatedTx : t))
-    );
-
-    setWallets((prev) => {
-      if (prev.length === 0) return prev;
-      return prev.map((w) => {
-        let newBal = w.balance;
-        // Revert old tx amount from old wallet
-        if (w.id === oldTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
-          newBal -= oldTx.amount;
-        }
-        // Add updated tx amount to updated wallet
-        if (w.id === updatedTx.walletId || (prev.length === 1 && w.id === prev[0].id)) {
-          newBal += updatedTx.amount;
-        }
-        return { ...w, balance: newBal };
-      });
-    });
-
-    setIsEditTxModalOpen(false);
-    setSelectedTxToEdit(null);
+    const transactionCloudId = transactionCloudIdsRef.current.get(updatedTx.id);
+    const walletCloudId = walletCloudIdsRef.current.get(updatedTx.walletId);
+    if (!transactionCloudId || !walletCloudId) return reportCloudSaveError(new Error("Transaction is not synchronized."));
+    try {
+      await updateCloudTransaction(transactionCloudId, updatedTx, walletCloudId);
+      await refreshCloudFinance();
+      setIsEditTxModalOpen(false);
+      setSelectedTxToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   // Handle addition of a wallet
-  const handleAddWallet = (newWallet: Omit<Wallet, "id">) => {
+  const handleAddWallet = async (newWallet: Omit<Wallet, "id">) => {
     const nextId = Math.max(0, ...wallets.map((w) => w.id)) + 1;
     const wallet: Wallet = { ...newWallet, id: nextId };
-
-    setWallets((prev) => [...prev, wallet]);
-    setIsWalletModalOpen(false);
+    try {
+      const createPromise = createCloudWallet(wallet);
+      pendingWalletCreatesRef.current.set(wallet.id, createPromise);
+      const cloudId = await createPromise;
+      walletCloudIdsRef.current.set(wallet.id, cloudId);
+      pendingWalletCreatesRef.current.delete(wallet.id);
+      await refreshCloudFinance();
+      setIsWalletModalOpen(false);
+    } catch (error) {
+      pendingWalletCreatesRef.current.delete(wallet.id);
+      reportCloudSaveError(error);
+    }
   };
 
   // Handle wallet edits, saves, and deletes
@@ -3202,22 +2904,37 @@ export default function App() {
     setIsEditWalletModalOpen(true);
   };
 
-  const handleSaveWallet = (updatedWallet: Wallet) => {
-    setWallets((prev) =>
-      prev.map((w) => (w.id === updatedWallet.id ? updatedWallet : w))
-    );
-    setIsEditWalletModalOpen(false);
-    setSelectedWalletToEdit(null);
+  const handleSaveWallet = async (updatedWallet: Wallet) => {
+    const walletCloudId = walletCloudIdsRef.current.get(updatedWallet.id);
+    if (!walletCloudId) return reportCloudSaveError(new Error("Wallet is not synchronized."));
+    try {
+      await updateCloudWallet(walletCloudId, updatedWallet);
+      await refreshCloudFinance();
+      setIsEditWalletModalOpen(false);
+      setSelectedWalletToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleDeleteWallet = (walletId: number) => {
-    setWallets((prev) => prev.filter((w) => w.id !== walletId));
-    setIsEditWalletModalOpen(false);
-    setSelectedWalletToEdit(null);
+  const handleDeleteWallet = async (walletId: number) => {
+    if (transactions.some((transaction) => transaction.walletId === walletId)) {
+      return reportCloudSaveError(new Error("Delete this wallet's transactions first."));
+    }
+    const walletCloudId = walletCloudIdsRef.current.get(walletId);
+    if (!walletCloudId) return reportCloudSaveError(new Error("Wallet is not synchronized."));
+    try {
+      await deleteCloudWallet(walletCloudId);
+      await refreshCloudFinance();
+      setIsEditWalletModalOpen(false);
+      setSelectedWalletToEdit(null);
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   // Handle savings goals actions (add, deposit, withdraw, delete, confetti)
-  const handleAddGoal = (newGoal: Omit<SavingsGoal, "id" | "status">) => {
+  const handleAddGoal = async (newGoal: Omit<SavingsGoal, "id" | "status">) => {
     const nextId = Math.max(0, ...savingsGoals.map((g) => g.id)) + 1;
     const goal: SavingsGoal = {
       ...newGoal,
@@ -3225,52 +2942,57 @@ export default function App() {
       status: newGoal.currentAmount >= newGoal.targetAmount ? "COMPLETED" : "IN_PROGRESS",
     };
 
-    setSavingsGoals((prev) => [...prev, goal]);
-    setIsAddGoalModalOpen(false);
-
-    if (goal.status === "COMPLETED") {
-      triggerConfetti();
+    try {
+      const cloudId = await createCloudSavingsGoal(goal);
+      savingsGoalCloudIdsRef.current.set(goal.id, cloudId);
+      await refreshCloudFinance();
+      setIsAddGoalModalOpen(false);
+      if (goal.status === "COMPLETED") triggerConfetti();
+    } catch (error) {
+      reportCloudSaveError(error);
     }
   };
 
-  const handleDepositToGoal = (goalId: number, amount: number) => {
+  const handleDepositToGoal = async (goalId: number, amount: number) => {
     if (amount <= 0) return;
-    setSavingsGoals((prev) =>
-      prev.map((g) => {
-        if (g.id !== goalId) return g;
-        const newAmt = Math.round((g.currentAmount + amount) * 100) / 100;
-        const isNowCompleted = newAmt >= g.targetAmount;
-
-        if (isNowCompleted && g.status !== "COMPLETED") {
-          triggerConfetti();
-        }
-
-        return {
-          ...g,
-          currentAmount: newAmt,
-          status: isNowCompleted ? "COMPLETED" : "IN_PROGRESS",
-        };
-      })
-    );
+    const goal = savingsGoals.find((item) => item.id === goalId);
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!goal || !cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    const currentAmount = Math.round((goal.currentAmount + amount) * 100) / 100;
+    const updatedGoal = { ...goal, currentAmount, status: currentAmount >= goal.targetAmount ? "COMPLETED" as const : "IN_PROGRESS" as const };
+    try {
+      await updateCloudSavingsGoal(cloudId, updatedGoal);
+      await refreshCloudFinance();
+      if (updatedGoal.status === "COMPLETED" && goal.status !== "COMPLETED") triggerConfetti();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleWithdrawFromGoal = (goalId: number, amount: number) => {
+  const handleWithdrawFromGoal = async (goalId: number, amount: number) => {
     if (amount <= 0) return;
-    setSavingsGoals((prev) =>
-      prev.map((g) => {
-        if (g.id !== goalId) return g;
-        const newAmt = Math.max(0, Math.round((g.currentAmount - amount) * 100) / 100);
-        return {
-          ...g,
-          currentAmount: newAmt,
-          status: newAmt >= g.targetAmount ? "COMPLETED" : "IN_PROGRESS",
-        };
-      })
-    );
+    const goal = savingsGoals.find((item) => item.id === goalId);
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!goal || !cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    const currentAmount = Math.max(0, Math.round((goal.currentAmount - amount) * 100) / 100);
+    const updatedGoal = { ...goal, currentAmount, status: currentAmount >= goal.targetAmount ? "COMPLETED" as const : "IN_PROGRESS" as const };
+    try {
+      await updateCloudSavingsGoal(cloudId, updatedGoal);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
-  const handleDeleteGoal = (goalId: number) => {
-    setSavingsGoals((prev) => prev.filter((g) => g.id !== goalId));
+  const handleDeleteGoal = async (goalId: number) => {
+    const cloudId = savingsGoalCloudIdsRef.current.get(goalId);
+    if (!cloudId) return reportCloudSaveError(new Error("Savings goal is not synchronized."));
+    try {
+      await deleteCloudSavingsGoal(cloudId);
+      await refreshCloudFinance();
+    } catch (error) {
+      reportCloudSaveError(error);
+    }
   };
 
   const triggerConfetti = () => {
@@ -3293,166 +3015,174 @@ export default function App() {
     .filter((g) => g.status === "IN_PROGRESS")
     .reduce((sum, g) => sum + g.currentAmount, 0);
   const availableBalance = Math.max(0, totalBalance - activeSavingsSum);
+  const upcomingExpenses = getUpcomingOccurrences(recurringExpenses, new Date(), 14)
+    .filter((occurrence) => !handledOccurrenceIdsRef.current.has(occurrence.occurrenceId));
 
-  const screens = [
-    <HomeScreen
+  if (!isCurrentUserReady) {
+    const isVietnamese = i18n.language?.startsWith("vi");
+    return (
+      <>
+        {cloudLoadStatus !== "error" ? <AppLoadingScreen label={isVietnamese ? "Đang đồng bộ không gian tài chính…" : "Syncing your financial workspace…"} /> : null}
+        <main className={cloudLoadStatus === "error" ? "grid min-h-screen place-items-center bg-[var(--paper-canvas)] px-6 text-center text-[var(--paper-ink)]" : "hidden"}>
+        <div className="max-w-sm rounded-3xl border border-[var(--paper-border)] bg-white p-6 shadow-[0_18px_50px_rgba(25,27,23,0.08)]">
+          <h1 className="text-lg font-bold">
+            {cloudLoadStatus === "error"
+              ? (isVietnamese ? "Chưa thể tải dữ liệu" : "Unable to load your data")
+              : (isVietnamese ? "Đang tải dữ liệu của bạn…" : "Loading your data…")}
+          </h1>
+          <p className="mt-2 text-sm font-medium text-[var(--paper-muted)]">
+            {cloudLoadStatus === "error"
+              ? cloudLoadError
+              : (isVietnamese ? "Đang đồng bộ không gian tài chính riêng của bạn." : "Syncing your private financial workspace.")}
+          </p>
+          {cloudLoadStatus === "error" ? (
+            <button
+              type="button"
+              onClick={() => setCloudReloadAttempt((attempt) => attempt + 1)}
+              className="mt-5 min-h-11 rounded-full bg-[var(--paper-action)] px-5 text-sm font-bold text-white"
+            >
+              {isVietnamese ? "Thử lại" : "Try again"}
+            </button>
+          ) : null}
+        </div>
+        </main>
+      </>
+    );
+  }
+
+  const screen = activeTab === "home" ? (
+    <PaperHomeScreen
       wallets={wallets}
       transactions={filteredTransactions}
       budget={budget}
-      onEditBudgetClick={() => setIsBudgetModalOpen(true)}
-      onAddTransactionClick={() => setIsTxModalOpen(true)}
-      onAddWalletClick={() => setIsWalletModalOpen(true)}
-      userName={userName}
-      onEditName={handleEditName}
-      onEditWalletClick={handleEditWalletClick}
+      onEditBudget={() => setIsBudgetModalOpen(true)}
+      onAddTransaction={() => setIsTxModalOpen(true)}
+      onScanReceipt={() => setActiveTab("split-bill")}
+      onAddWallet={() => setIsWalletModalOpen(true)}
+      onEditWallet={handleEditWalletClick}
       onDeleteTransaction={handleDeleteTransaction}
       onEditTransaction={handleEditTxClick}
-    />,
-    <StatisticsScreen
-      wallets={wallets}
-      transactions={transactions}
-      budget={budget}
-      savingsGoals={savingsGoals}
-      availableBalance={availableBalance}
-      totalBalance={totalBalance}
-      onAddGoalClick={() => setIsAddGoalModalOpen(true)}
-      onDeposit={handleDepositToGoal}
-      onWithdraw={handleWithdrawFromGoal}
-      onDeleteGoal={handleDeleteGoal}
-      onDeleteTransaction={handleDeleteTransaction}
-      onEditTransaction={handleEditTxClick}
-    />,
-    <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />,
-  ];
+      upcomingExpenses={upcomingExpenses}
+      onConfirmRecurring={handleConfirmRecurring}
+      onConfigureRecurring={() => setActiveTab("settings")}
+    />
+  ) : activeTab === "statistics" ? (
+    <div className="min-h-[100dvh] bg-[var(--paper-canvas)] px-4 pb-32 pt-6 text-[var(--paper-ink)] md:px-8 md:pb-10">
+      <div className="mx-auto w-full max-w-[1440px]">
+        <StatisticsScreen
+          wallets={wallets}
+          transactions={transactions}
+          budget={budget}
+          savingsGoals={savingsGoals}
+          availableBalance={availableBalance}
+          totalBalance={totalBalance}
+          onAddGoalClick={() => setIsAddGoalModalOpen(true)}
+          onDeposit={handleDepositToGoal}
+          onWithdraw={handleWithdrawFromGoal}
+          onDeleteGoal={handleDeleteGoal}
+          onDeleteTransaction={handleDeleteTransaction}
+          onEditTransaction={handleEditTxClick}
+        />
+      </div>
+    </div>
+  ) : activeTab === "split-bill" ? (
+    <div className="min-h-[100dvh] bg-[var(--paper-canvas)] px-4 py-6 text-[var(--paper-ink)] md:px-8">
+      <SplitScreen userName={userName} onAddTransaction={handleAddTransaction} />
+    </div>
+  ) : (
+    <main className="mx-auto w-full max-w-3xl px-4 pb-28 pt-7 sm:px-6 md:px-8 md:pb-10">
+      <h1 className="text-[30px] font-extrabold tracking-[-0.04em] text-[var(--paper-ink)]">{t("menu.settings")}</h1>
+      <p className="mt-2 text-sm font-medium text-[var(--paper-muted)]">
+        {i18n.language?.startsWith("vi") ? "Tùy chỉnh trải nghiệm và kết nối của bạn." : "Customize your experience and connections."}
+      </p>
+      <div className="paper-surface mt-6 grid gap-5 rounded-[24px] p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--paper-border)] pb-5">
+          <div>
+            <h2 className="text-base font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Ngôn ngữ & tiền tệ" : "Language & currency"}</h2>
+            <p className="mt-1 text-xs font-medium text-[var(--paper-muted)]">{i18n.language?.startsWith("vi") ? "Cách số tiền và nội dung được hiển thị." : "How amounts and content are displayed."}</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-2xl bg-[var(--paper-action)] p-2"><CurrencyToggle /><LanguageToggle /></div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Hồ sơ & tích hợp" : "Profile & integrations"}</h2>
+            <p className="mt-1 text-xs font-medium text-[var(--paper-muted)]">{userName || (i18n.language?.startsWith("vi") ? "Chưa đặt tên" : "No name set")}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleEditName} className="min-h-11 rounded-full border border-[var(--paper-border)] px-4 text-xs font-bold text-[var(--paper-ink)]">{i18n.language?.startsWith("vi") ? "Sửa hồ sơ" : "Edit profile"}</button>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5">
+        <RecurringExpensesSettings
+          expenses={recurringExpenses}
+          wallets={wallets}
+          locale={i18n.language?.startsWith("vi") ? "vi-VN" : "en-US"}
+          formatCurrency={formatCurrency}
+          onAdd={handleAddRecurringExpense}
+          onToggle={handleToggleRecurringExpense}
+          onDelete={handleDeleteRecurringExpense}
+        />
+      </div>
+    </main>
+  );
 
   return (
     <>
-      <style>{`
-        :root { color-scheme: dark; }
-        body { background: #080809; margin: 0; }
-        .hide-scroll { scrollbar-width: none; }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        /* Smooth scrolling for main area */
-        .desktop-content { scroll-behavior: smooth; }
-      `}</style>
-
-      <div className="flex h-[100dvh] w-full bg-[#0A0A0A] text-white overflow-hidden relative">
-        {/* Desktop Sidebar */}
-        <Sidebar active={activeTab} onChange={setActiveTab} userName={userName} onEditName={handleEditName} />
-
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col h-full md:pl-64 overflow-y-auto w-full pb-20 md:pb-0 hide-scroll">
-          {/* Header */}
-          <header
-            className="sticky top-0 z-40 w-full px-4 md:px-8 py-3.5 md:py-5 flex items-center justify-between border-b border-white/10 transition-all duration-300"
-            style={{
-              background: "rgba(18, 18, 18, 0.85)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-            }}
+      {cloudLoadError ? (
+        <div className="fixed inset-x-4 top-4 z-[70] mx-auto max-w-xl rounded-2xl border border-[#b42318]/20 bg-white px-4 py-3 text-sm font-medium text-[#8b1e16] shadow-lg">
+          {cloudLoadError}
+        </div>
+      ) : null}
+      <AppShell
+        active={activeTab}
+        onNavigate={setActiveTab}
+        onAddTransaction={() => setIsTxModalOpen(true)}
+        onScanReceipt={() => setActiveTab("split-bill")}
+        labels={{
+          home: t("menu.home"),
+          statistics: t("menu.stats"),
+          splitBill: t("menu.split"),
+          settings: t("menu.settings"),
+          actions: i18n.language?.startsWith("vi") ? "Tác vụ nhanh" : "Quick actions",
+          addTransaction: t("dashboard.newTransaction"),
+          scanReceipt: i18n.language?.startsWith("vi") ? "Quét hóa đơn" : "Scan receipt",
+          close: t("common.close"),
+        }}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <div>
-                <div className="hidden sm:flex items-center gap-2 mb-0.5">
-                  <span className="text-[11px] md:text-[15px] hidden md:inline" style={{ color: C.tm }}>
-                    • {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                <h2
-                  className="text-base md:text-2xl font-bold cursor-pointer hover:text-gold transition-colors flex items-center gap-1.5 truncate text-white"
-                  onClick={handleEditName}
-                >
-                  <span className="truncate">{t("dashboard.welcome")}, {userName || "User"}</span> 👋
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-              {/* Search input - hidden on mobile, shown on desktop */}
-              <div className="hidden md:block relative group">
-                <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-gold"
-                  size={16}
-                  color={C.tm}
-                />
-                <input
-                  type="text"
-                  placeholder={t("dashboard.searchPlaceholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-11 pr-4 py-2.5 rounded-2xl w-56 lg:w-64 text-sm transition-all duration-300 focus:w-72 outline-none border font-sans"
-                  style={{
-                    background: C.card,
-                    borderColor: C.border,
-                    color: C.white,
-                  }}
-                />
-              </div>
-
-              {/* New Transaction Button */}
-              <motion.button
-                className="px-3 md:px-4 py-2 md:py-2.5 rounded-xl md:rounded-2xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg transition-all"
-                style={{
-                  background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldL} 100%)`,
-                  color: C.bg,
-                  boxShadow: `0 4px 16px ${C.gold}33`,
-                }}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ duration: 0.15 }}
-                onClick={() => setIsTxModalOpen(true)}
-                title={t("dashboard.newTransaction")}
-              >
-                <Plus size={16} strokeWidth={2.5} />
-                <span className="hidden sm:inline">{t("dashboard.newTransaction")}</span>
-              </motion.button>
-
-              {/* Currency & Language Toggles */}
-              <CurrencyToggle />
-              <LanguageToggle />
-            </div>
-          </header>
-
-          {/* Screen Content */}
-          <div className="flex-1 px-4 md:px-8 py-4 md:py-6 max-w-[1400px] w-full mx-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {screens[activeTab]}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
-
-        {/* Mobile Bottom Navigation */}
-        <BottomNav active={activeTab} onChange={setActiveTab} />
-      </div>
+            {screen}
+          </motion.div>
+        </AnimatePresence>
+      </AppShell>
 
       {/* Add Transaction Drawer (Vaul iOS-style Bottom Sheet) */}
       <Drawer.Root open={isTxModalOpen} onOpenChange={setIsTxModalOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-          <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-[32px] border-t outline-none font-sans max-h-[90vh]" style={{ background: C.card, borderColor: C.border }}>
+          <Drawer.Content className="paper-ledger fixed bottom-0 left-0 right-0 z-50 flex max-h-[90vh] flex-col rounded-t-[32px] border-t font-sans text-[var(--paper-ink)] outline-none" style={{ background: C.card, borderColor: C.border, color: "var(--paper-ink)" }}>
             {/* Drag Handle */}
-            <div className="mx-auto w-12 h-1.5 rounded-full my-3 bg-white/20" />
+            <div className="mx-auto my-3 h-1.5 w-12 rounded-full bg-[var(--paper-border)]" />
             
             {/* Content Container */}
             <div className="p-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
-                <Drawer.Title className="text-[18px] font-bold text-white">
-                  {t("dashboard.newTransaction", "Thêm giao dịch")}
+                <Drawer.Title className="text-[18px] font-bold text-[var(--paper-ink)]">
+                  {t("dashboard.newTransaction")}
                 </Drawer.Title>
                 <Drawer.Description className="sr-only">Add a new expense or income transaction</Drawer.Description>
                 <button
                   onClick={() => setIsTxModalOpen(false)}
-                  className="text-[13px] font-medium text-tm hover:text-white px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                  className="cursor-pointer rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                 >
-                  {t("common.close", "Đóng")}
+                  {t("common.close")}
                 </button>
               </div>
               <AddTransactionForm wallets={wallets} onAdd={handleAddTransaction} />
@@ -3468,7 +3198,7 @@ export default function App() {
           setIsEditTxModalOpen(false);
           setSelectedTxToEdit(null);
         }}
-        title={t("dashboard.editTransaction", "Chỉnh sửa giao dịch")}
+        title={t("dashboard.editTransaction")}
       >
         {selectedTxToEdit && (
           <EditTransactionForm
@@ -3485,7 +3215,7 @@ export default function App() {
       </Modal>
 
       {/* Add Wallet Modal */}
-      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)} title={t("dashboard.activeWallets", "Tạo ví mới")}>
+      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)} title={t("dashboard.activeWallets")}>
         <AddWalletForm onAdd={handleAddWallet} />
       </Modal>
 
@@ -3533,9 +3263,15 @@ export default function App() {
       <Modal isOpen={isBudgetModalOpen} onClose={() => setIsBudgetModalOpen(false)} title="Edit Monthly Budget">
         <EditBudgetForm
           initialBudget={budget}
-          onSave={(newBudget) => {
-            setBudget(newBudget);
-            setIsBudgetModalOpen(false);
+          onSave={async (newBudget) => {
+            try {
+              const savedBudget = await saveCloudBudget(newBudget);
+              budgetCloudIdRef.current = savedBudget.id;
+              await refreshCloudFinance();
+              setIsBudgetModalOpen(false);
+            } catch (error) {
+              reportCloudSaveError(error);
+            }
           }}
         />
       </Modal>
@@ -3557,7 +3293,7 @@ export default function App() {
             </div>
 
             <motion.div
-              className="relative w-full max-w-md p-8 rounded-3xl border shadow-2xl text-center"
+              className="paper-ledger paper-dialog relative w-full max-w-md p-8 rounded-3xl border shadow-2xl text-center"
               style={{ background: C.card, borderColor: C.border }}
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -3620,4 +3356,3 @@ export default function App() {
     </>
   );
 }
-

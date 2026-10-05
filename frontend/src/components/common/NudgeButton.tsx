@@ -3,6 +3,7 @@ import { Sparkles, Loader2 } from "lucide-react";
 import { toBlob } from "html-to-image";
 import { useTranslation } from "react-i18next";
 import { C } from "../../App";
+import { useCurrency } from "../../context/CurrencyContext";
 
 interface NudgeButtonProps {
   debtorName: string;
@@ -23,9 +24,8 @@ const NUDGE_QUOTES = [
 ];
 
 // Hàm sinh câu quote ngẫu nhiên thế các placeholder
-function generateRandomQuote(name: string, amount: number, purpose: string): string {
+function generateRandomQuote(name: string, amountFormatted: string, purpose: string): string {
   const randomTemplate = NUDGE_QUOTES[Math.floor(Math.random() * NUDGE_QUOTES.length)];
-  const amountFormatted = `$${amount.toLocaleString()}`;
   const safeName = name && name.trim().length > 0 ? name.trim() : "bạn iu";
   const safePurpose = purpose && purpose.trim().length > 0 ? purpose.trim() : "kèo ăn uống";
 
@@ -42,10 +42,12 @@ export function NudgeButton({
   className = "",
 }: NudgeButtonProps) {
   const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [isLoading, setIsLoading] = useState(false);
   const [currentQuote, setCurrentQuote] = useState("");
   const safePurpose = purpose || t("nudge.purpose");
   const memeRef = useRef<HTMLDivElement>(null);
+  const formattedAmountStr = formatCurrency(amount);
 
   const handleNudgeClick = async () => {
     if (isLoading) return;
@@ -53,7 +55,7 @@ export function NudgeButton({
 
     try {
       // 1. Sinh quote ngẫu nhiên và lưu vào state
-      const quoteText = generateRandomQuote(debtorName, amount, safePurpose);
+      const quoteText = generateRandomQuote(debtorName, formattedAmountStr, safePurpose);
       setCurrentQuote(quoteText);
 
       // Chờ React cập nhật DOM chứa quote mới
@@ -247,7 +249,7 @@ export function NudgeButton({
               zIndex: 1,
             }}
           >
-            DEBTOR: {debtorName.toUpperCase()} | AMOUNT: ${amount.toLocaleString()} | DUE: TODAY
+            DEBTOR: {debtorName.toUpperCase()} | AMOUNT: {formattedAmountStr} | DUE: TODAY
           </div>
         </div>
       </div>

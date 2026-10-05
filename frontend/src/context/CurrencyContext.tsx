@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { CurrencyType, toDisplayedAmount, VND_PER_USD } from "./currencyAmounts";
 
-export type CurrencyType = "VND" | "USD";
+export type { CurrencyType } from "./currencyAmounts";
 
 interface CurrencyContextType {
   currency: CurrencyType;
@@ -21,7 +22,16 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return "VND"; // Default VND
   });
 
-  const exchangeRate = 25000;
+  const exchangeRate = VND_PER_USD;
+
+  useEffect(() => {
+    const handlePreferencesChanged = (event: Event) => {
+      const currency = (event as CustomEvent<{ currency?: CurrencyType }>).detail?.currency;
+      if (currency === "VND" || currency === "USD") setCurrencyState(currency);
+    };
+    window.addEventListener("wealthy-preferences-changed", handlePreferencesChanged);
+    return () => window.removeEventListener("wealthy-preferences-changed", handlePreferencesChanged);
+  }, []);
 
   const setCurrency = (c: CurrencyType) => {
     setCurrencyState(c);
@@ -54,7 +64,7 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return isNegative ? `-${formatted} ₫` : `${formatted} ₫`;
     } else {
       // USD mode: Convert base VND amount to USD unless forceRaw is specified
-      const finalAmount = forceRaw ? absVal : absVal / exchangeRate;
+      const finalAmount = forceRaw ? absVal : toDisplayedAmount(absVal, currency);
       const formatted = finalAmount.toLocaleString("en-US", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,

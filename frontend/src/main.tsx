@@ -71,15 +71,18 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 import { CurrencyProvider } from "./context/CurrencyContext";
+import { AuthProvider } from "./features/auth/AuthProvider";
 
 const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <CurrencyProvider>
-          <App />
-        </CurrencyProvider>
+        <AuthProvider>
+          <CurrencyProvider>
+            <App />
+          </CurrencyProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );

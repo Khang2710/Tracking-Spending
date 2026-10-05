@@ -20,12 +20,12 @@ export interface SavedBill {
 }
 
 export interface TransactionRecord {
-  id: string;
+  id?: string | number;
   date: string;
   description: string;
   amount: number;
   isLent: boolean;
-  isSettled: boolean;
+  isSettled?: boolean;
 }
 
 export interface FriendBalanceItem {
@@ -35,7 +35,7 @@ export interface FriendBalanceItem {
   history: TransactionRecord[];
 }
 
-import { Transaction } from "./App";
+import { Transaction } from "../../App";
 
 export default function SplitScreen({
   userName,
@@ -204,7 +204,7 @@ export default function SplitScreen({
       {/* Unified Screen Header */}
       <div className="px-5 md:px-0 pt-12 md:pt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-bold text-white tracking-tight flex items-center gap-2 font-sans">
+          <h1 className="text-[22px] md:text-[28px] font-bold text-[var(--paper-ink)] tracking-tight flex items-center gap-2 font-sans">
             <Users color={C.gold} size={26} /> {t("split.headerTitle")}
           </h1>
           <p className="text-sm text-tm font-sans">

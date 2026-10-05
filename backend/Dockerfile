@@ -1,23 +1,24 @@
-# Stage 1: Build the Maven application using JDK 17
-FROM maven:3.9.6-eclipse-temurin-17 AS build
+FROM node:22-alpine AS build
+
 WORKDIR /app
 
-# Copy pom.xml and source code
-COPY pom.xml .
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
 COPY src ./src
+RUN npm run build
+RUN npm prune --omit=dev
 
-# Package application (skip tests for fast build)
-RUN mvn clean package -DskipTests
+FROM node:22-alpine AS runtime
 
-# Stage 2: Minimal Java Runtime environment
-FROM eclipse-temurin:17-jre
+ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy compiled JAR artifact from build stage
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
 
-# Render assigns a dynamic PORT environment variable (default 8080)
-EXPOSE 8080
-ENV PORT=8080
+USER node
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+CMD ["npm", "start"]
