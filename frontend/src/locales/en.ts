@@ -44,6 +44,8 @@ const en = {
     budget_alert_warning: "⚠️ You have spent {{percent}}% of your monthly budget. Be careful!",
     budgetAlertDanger: "🚨 ALERT: You have exceeded your monthly budget by {{amount}}!",
     budget_alert_danger: "🚨 ALERT: You have exceeded your monthly budget by {{amount}}!",
+    budgetOverBy: "Over budget by {{amount}}",
+    budgetUsedPercent: "{{percent}}% of the monthly budget used",
     description: "Description",
     amount: "Amount",
     category: "Category",

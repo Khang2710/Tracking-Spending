@@ -44,6 +44,8 @@ const vi = {
     budget_alert_warning: "⚠️ Bạn đã tiêu hết {{percent}}% ngân sách tháng này. Hãy cẩn thận!",
     budgetAlertDanger: "🚨 CẢNH BÁO: Bạn đã vượt quá ngân sách tháng này {{amount}}!",
     budget_alert_danger: "🚨 CẢNH BÁO: Bạn đã vượt quá ngân sách tháng này {{amount}}!",
+    budgetOverBy: "Vượt ngân sách {{amount}}",
+    budgetUsedPercent: "Đã dùng {{percent}}% ngân sách tháng",
     description: "Mô tả / Tên giao dịch",
     amount: "Số tiền",
     category: "Danh mục",

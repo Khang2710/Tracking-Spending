@@ -84,6 +84,8 @@ export function HomeScreen({
               dailyLimit: t("dashboard.limit"),
               daysLeft: t("dashboard.daysLeft"),
               setup: locale.startsWith("vi") ? "Thiết lập" : "Set up",
+              overBudget: t("dashboard.budgetOverBy", { amount: formatCurrency(budgetSummary.overAmount) }),
+              budgetWarning: t("dashboard.budgetUsedPercent", { percent: Math.round(budgetSummary.rawPercent) }),
             }}
           />
 

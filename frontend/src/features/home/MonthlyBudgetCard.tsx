@@ -14,6 +14,8 @@ interface MonthlyBudgetCardProps {
     dailyLimit: string;
     daysLeft: string;
     setup: string;
+    overBudget: string;
+    budgetWarning: string;
   };
 }
 
@@ -80,7 +82,7 @@ export function MonthlyBudgetCard({
       {isWarning ? (
         <div className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-[12px] font-semibold ${isOver ? "bg-[#F8E9E5] text-[var(--paper-expense)]" : "bg-[#F8F0E3] text-[var(--paper-warning)]"}`}>
           {isOver ? <AlertTriangle size={16} aria-hidden="true" /> : <ArrowUpRight size={16} aria-hidden="true" />}
-          <span>{isOver ? `Vượt ngân sách ${formatCurrency(summary.overAmount)}` : `Đã dùng ${Math.round(summary.rawPercent)}% ngân sách tháng`}</span>
+          <span>{isOver ? labels.overBudget : labels.budgetWarning}</span>
         </div>
       ) : null}
     </section>

@@ -65,6 +65,19 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Chưa có giao dịch nào.")).toBeInTheDocument();
   });
 
+  it("shows the over-budget warning in the selected English language", async () => {
+    await i18n.changeLanguage("en");
+    renderHome({
+      budget: 120,
+      transactions: [
+        { id: 1, name: "Test", date: "2026-09-22", amount: -131, category: "Others", walletId: 1, note: null },
+      ],
+    });
+
+    expect(screen.getByText("Over budget by $11")).toBeInTheDocument();
+    expect(screen.queryByText(/Vượt ngân sách/i)).not.toBeInTheDocument();
+  });
+
   it("reveals upcoming expenses progressively and confirms payment on demand", async () => {
     const user = userEvent.setup();
     const onConfirmRecurring = vi.fn();
